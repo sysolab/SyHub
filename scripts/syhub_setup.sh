@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # syhub.sh: Setup script for IoT monitoring system on Raspberry Pi
-# Version: 1.2.1
+# Version: 1.2.2
 # Manages WiFi AP+STA, Mosquitto, VictoriaMetrics, Node-RED, and Flask dashboard
 
 # Function to check if script is run as root
@@ -30,7 +30,7 @@ install_yq() {
     if ! command -v yq &> /dev/null || ! yq --version | grep -q "mikefarah/yq"; then
         echo "Installing or updating yq (version 4.x)..."
         sudo apt update
-        wget https://github.com/mikefarah/yq/releases/download/v4.45.1/yq_linux_arm64 -O /usr/local/bin/yq || { echo "Failed to download yq"; exit 1; }
+        wget https://github.com/mikefarah/yq/releases/download/v4.35.2/yq_linux_arm64 -O /usr/local/bin/yq || { echo "Failed to download yq"; exit 1; }
         sudo chmod +x /usr/local/bin/yq
     fi
     YQ_VERSION=$(yq --version | awk '{print $NF}')
@@ -53,23 +53,42 @@ load_config() {
     fi
 
     # Validate YAML syntax
-    yq e '.' "$CONFIG_FILE" > /dev/null || { echo "Error: $CONFIG_FILE contains invalid YAML"; exit 1; }
+    echo "Validating YAML syntax..."
+    if ! yq e '.' "$CONFIG_FILE" > /tmp/config.yml.parsed 2> /tmp/config.yml.errors; then
+        echo "Error: $CONFIG_FILE contains invalid YAML"
+        cat /tmp/config.yml.errors
+        exit 1
+    fi
+    echo "Parsed YAML structure:"
+    cat /tmp/config.yml.parsed
 
-    # Load configuration with error handling
-    PROJECT_NAME=$(yq e '.project.name' "$CONFIG_FILE" 2>/dev/null || echo "")
-    WIFI_SSID=$(yq e '.project.wifi_ssid' "$CONFIG_FILE" 2>/dev/null || echo "")
-    WIFI_PASSWORD=$(yq e '.project.wifi_password' "$CONFIG_FILE" 2>/dev/null || echo "")
-    STA_WIFI_SSID=$(yq e '.project.sta_wifi_ssid' "$CONFIG_FILE" 2>/dev/null || echo "")
-    STA_WIFI_PASSWORD=$(yq e '.project.sta_wifi_password' "$CONFIG_FILE" 2>/dev/null || echo "")
-    MQTT_USERNAME=$(yq e '.project.mqtt.username' "$CONFIG_FILE" 2>/dev/null || echo "")
-    MQTT_PASSWORD=$(yq e '.project.mqtt.password' "$CONFIG_FILE" 2>/dev/null || echo "")
-    MQTT_PORT=$(yq e '.project.mqtt.port' "$CONFIG_FILE" 2>/dev/null || echo "")
-    MQTT_TOPIC=$(yq e '.project.mqtt.topic' "$CONFIG_FILE" 2>/dev/null || echo "")
-    VM_PORT=$(yq e '.project.victoria_metrics.port' "$CONFIG_FILE" 2>/dev/null || echo "")
-    NR_PORT=$(yq e '.project.node_red.port' "$CONFIG_FILE" 2>/dev/null || echo "")
-    DASHBOARD_PORT=$(yq e '.project.dashboard.port' "$CONFIG_FILE" 2>/dev/null || echo "")
-    NR_USERNAME=$(yq e '.project.node_red_username' "$CONFIG_FILE" 2>/dev/null || echo "")
-    NR_PASSWORD_HASH=$(yq e '.project.node_red_password_hash' "$CONFIG_FILE" 2>/dev/null || echo "")
+    # Load configuration with error checking
+    load_field() {
+        local field=$1
+        local var_name=$2
+        local value
+        value=$(yq e "$field" "$CONFIG_FILE")
+        if [ $? -ne 0 ] || [ "$value" = "null" ] || [ -z "$value" ]; then
+            echo "Error: Failed to parse $field from $CONFIG_FILE"
+            return 1
+        fi
+        eval "$var_name='$value'"
+    }
+
+    load_field '.project.name' PROJECT_NAME || exit 1
+    load_field '.project.wifi_ssid' WIFI_SSID || exit 1
+    load_field '.project.wifi_password' WIFI_PASSWORD || exit 1
+    load_field '.project.sta_wifi_ssid' STA_WIFI_SSID || exit 1
+    load_field '.project.sta_wifi_password' STA_WIFI_PASSWORD || exit 1
+    load_field '.project.mqtt.username' MQTT_USERNAME || exit 1
+    load_field '.project.mqtt.password' MQTT_PASSWORD || exit 1
+    load_field '.project.mqtt.port' MQTT_PORT || exit 1
+    load_field '.project.mqtt.topic' MQTT_TOPIC || exit 1
+    load_field '.project.victoria_metrics.port' VM_PORT || exit 1
+    load_field '.project.node_red.port' NR_PORT || exit 1
+    load_field '.project.dashboard.port' DASHBOARD_PORT || exit 1
+    load_field '.project.node_red_username' NR_USERNAME || exit 1
+    load_field '.project.node_red_password_hash' NR_PASSWORD_HASH || exit 1
 
     # Validate required fields
     if [ -z "$PROJECT_NAME" ] || [ -z "$WIFI_SSID" ] || [ -z "$WIFI_PASSWORD" ] || \

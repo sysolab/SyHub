@@ -4,7 +4,7 @@ project:
   wifi_ssid: plantomio_ap
   wifi_password: plantomio123
   sta_wifi_ssid: LiveLongAndRouter
-  sta_wifi_password: !Pirjo2diPirjo2diPirjo2di
+  sta_wifi_password: "!Pirjo2diPirjo2diPirjo2di"
   mqtt:
     uri: mqtt://plantomio.local
     port: 1883
@@ -20,3 +20,4 @@ project:
     port: 5000
   node_red_username: "admin"
   node_red_password_hash: "$2b$08$W99V1mAwhUg5M9.hX6kjY.qtLHyvk1YbiXIMQ8T.xafDsGHNEa1Na"
+```

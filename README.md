@@ -30,21 +30,21 @@ Prepare the Project Directory:
 mkdir -p ~/syhub/{config,scripts,static,templates}
 
 
-Copy Files: Place all provided files in their respective locations under ~/syhub/. The setup script should be syhub.sh. If you copy syhub.sh to syhub_setup.sh, ensure the contents match exactly. For user plantomioX1, files should be in /home/plantomioX1/syhub/.
+Copy Files: Place all provided files in their respective locations under ~/syhub/. The setup script should be syhub.sh. If you copy syhub.sh to syhub_setup.sh, ensure the contents match exactly (verify with diff). For user plantomioX1, files should be in /home/plantomioX1/syhub/.
 
-Verify config.yml: Ensure config.yml is in ~/syhub/config/config.yml with all required fields:
+Verify config.yml: Ensure config.yml is in ~/syhub/config/config.yml with all required fields. Use 2-space indentation and quote values with special characters (e.g., passwords starting with !):
 
 wifi_ssid and wifi_password: For the WiFi access point (AP mode).
 sta_wifi_ssid and sta_wifi_password: For connecting to your router (STA mode).
 Other settings: MQTT credentials, ports, etc.
 
-Example config.yml snippet:
+Example config.yml:
 project:
   name: plantomio
   wifi_ssid: plantomio_ap
   wifi_password: plantomio123
   sta_wifi_ssid: YourRouterSSID
-  sta_wifi_password: YourRouterPassword
+  sta_wifi_password: "YourRouterPassword"
   mqtt:
     username: plantomioX1
     password: plantomioX1Pass
@@ -59,6 +59,9 @@ project:
   node_red_username: admin
   node_red_password_hash: "$2b$08$W99V1mAwhUg5M9.hX6kjY.qtLHyvk1YbiXIMQ8T.xafDsGHNEa1Na"
 
+Validate syntax:
+yq e '.' ~/syhub/config/config.yml
+
 
 Generate Node-RED Password Hash:
 node-red admin hash-pw YOUR_PASSWORD
@@ -71,6 +74,7 @@ chmod +x ~/syhub/scripts/syhub.sh
 If using syhub_setup.sh, ensure it’s identical to syhub.sh:
 cp ~/syhub/scripts/syhub.sh ~/syhub/scripts/syhub_setup.sh
 chmod +x ~/syhub/scripts/syhub_setup.sh
+diff ~/syhub/scripts/syhub.sh ~/syhub/scripts/syhub_setup.sh
 
 
 Run the Setup Script:
@@ -115,9 +119,16 @@ WiFi: AP+STA setup optimized for Raspberry Pi 3B’s WiFi chip to avoid resource
 
 Troubleshooting
 
-YQ Errors:
+YQ Parsing Errors:
 
-If you see errors like yq: error: argument files: can't open '.project.name', the yq tool is outdated or misconfigured.
+If you see errors like Error: One or more required fields are missing or invalid, check yq parsing:yq e '.' ~/syhub/config/config.yml
+
+If it fails, inspect /tmp/config.yml.errors:cat /tmp/config.yml.errors
+
+
+Ensure passwords with special characters (e.g., starting with !) are quoted:sta_wifi_password: "!YourPassword"
+
+
 Verify yq version:yq --version
 
 Ensure it’s version 4.x (e.g., yq (https://github.com/mikefarah/yq/) version v4.35.2).
@@ -125,19 +136,16 @@ Reinstall yq if needed:sudo wget https://github.com/mikefarah/yq/releases/downlo
 sudo chmod +x /usr/local/bin/yq
 
 
-Check config.yml path and contents:ls -l ~/syhub/config/config.yml
-yq e '.' ~/syhub/config/config.yml
 
 
-
-
-Config File Not Found:
+Config File Issues:
 
 Ensure config.yml exists in ~/syhub/config/config.yml (e.g., /home/plantomioX1/syhub/config/config.yml).
 Verify:ls -l ~/syhub/config/config.yml
+cat ~/syhub/config/config.yml
 
 
-If missing, copy config.yml to the correct location and update sta_wifi_ssid, sta_wifi_password, etc.
+If missing or invalid, copy the provided config.yml and update sta_wifi_ssid, sta_wifi_password, etc.
 
 
 WiFi AP: Check journalctl -u hostapd and /tmp/AP_STA_RPI_SAME_WIFI_CHIP/install.log. Ensure devices connect to the AP (plantomio_ap by default).
