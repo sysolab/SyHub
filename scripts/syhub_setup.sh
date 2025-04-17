@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # syhub.sh: Setup script for IoT monitoring system on Raspberry Pi
-# Version: 1.2.0
+# Version: 1.2.1
 # Manages WiFi AP+STA, Mosquitto, VictoriaMetrics, Node-RED, and Flask dashboard
 
 # Function to check if script is run as root
@@ -34,8 +34,9 @@ install_yq() {
         sudo chmod +x /usr/local/bin/yq
     fi
     YQ_VERSION=$(yq --version | awk '{print $NF}')
-    if [[ ! "$YQ_VERSION" =~ ^4\..* ]]; then
-        echo "Error: yq version $YQ_VERSION is not supported. Requires version 4.x."
+    echo "Detected yq version: $YQ_VERSION"
+    if [[ ! "$YQ_VERSION" =~ ^v?4\.[0-9]+\.[0-9]+ ]]; then
+        echo "Error: yq version $YQ_VERSION is not supported. Requires version 4.x (e.g., 4.35.2)."
         exit 1
     fi
 }
