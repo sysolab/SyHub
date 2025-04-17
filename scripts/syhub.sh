@@ -393,15 +393,27 @@ setup_network() {
 
         # --- Configure Basic Avahi mDNS Service Definition ---
         # Advertise basic device info even if full network setup is skipped
-        log_message "INFO" "Configuring minimal Avahi (mDNS/Bonjour Service Definitions)..."
+           log_message "INFO" "Configuring minimal Avahi (mDNS/Bonjour Service Definitions)..."
         if [[ -f "$TEMPLATE_DIR/syhub-avahi.service.j2" ]]; then
-             process_template "$TEMPLATE_DIR/syhub-avahi.service.j2" "/etc/avahi/services/syhub.service"
-             chmod 644 "/etc/avahi/services/syhub.service"
-             systemctl enable avahi-daemon &> /dev/null # Ensure enabled
-             systemctl restart avahi-daemon # Restart to pick up changes
-             log_message "INFO" "Avahi service definition updated/created."
+            log_message "DEBUG" "Enabling verbose tracing for Avahi template processing."
+            set -x # Start tracing exact commands
+            # Call process_template and check its exit code explicitly
+            if process_template "$TEMPLATE_DIR/syhub-avahi.service.j2" "/etc/avahi/services/syhub.service"; then
+                set +x # Stop tracing
+                log_message "DEBUG" "Disabled verbose tracing."
+                log_message "INFO" "process_template completed for Avahi service file."
+                chmod 644 "/etc/avahi/services/syhub.service" || { log_message "ERROR" "Failed to chmod Avahi service file."; set +x; exit 1; }
+                systemctl enable avahi-daemon &> /dev/null || log_message "WARNING" "Failed to enable avahi-daemon (might already be enabled)."
+                systemctl restart avahi-daemon || log_message "WARNING" "Failed to restart avahi-daemon after updating service file."
+                log_message "INFO" "Avahi service definition updated/created and Avahi restarted."
+            else
+                set +x # Stop tracing even on failure
+                log_message "DEBUG" "Disabled verbose tracing."
+                log_message "ERROR" "process_template failed for Avahi service file. See trace above."
+                exit 1 # Exit if process_template failed
+            fi
         else
-             log_message "WARNING" "Avahi template ($TEMPLATE_DIR/syhub-avahi.service.j2) not found. Cannot configure mDNS service discovery."
+            log_message "WARNING" "Avahi template ($TEMPLATE_DIR/syhub-avahi.service.j2) not found. Cannot configure mDNS service discovery."
         fi
         log_message "INFO" "--- Network Setup Skipped (AP+STA Mode) ---"
         return 0 # Exit the function successfully
