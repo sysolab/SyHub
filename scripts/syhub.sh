@@ -131,7 +131,6 @@ check_internet() {
         log_message "INFO" "Internet connection verified."
     fi
 }
-
 # Process a template file using sed for simple substitution (one by one)
 process_template() {
     local template_path="$1"
@@ -151,6 +150,12 @@ process_template() {
         exit 1
     }
 
+    # --- Attempt to remove UTF-8 BOM if present ---
+    # The hex sequence \xEF\xBB\xBF represents the UTF-8 BOM.
+    # Apply this to the first line ('1s') only.
+    sed -i '1s/^\xEF\xBB\xBF//' "$temp_file"
+    # --- End BOM removal ---
+
     log_message "INFO" "Processing template '$template_path' -> '$output_path'"
 
     mapfile -t config_keys < <(printf "%s\n" "${!CONFIG[@]}")
@@ -161,37 +166,24 @@ process_template() {
         local placeholder="__${key_upper}__"
 
         # Check if the placeholder exists in the current state of the temp file
-        # Use grep -q for efficiency
         if grep -q "$placeholder" "$temp_file"; then
             local value="${CONFIG[$key_upper]}"
-
-            # Escape characters for sed's 's' command (delimiter @ chosen)
-            # 1. Escape backslashes first
             local escaped_value="${value//\\/\\\\}"
-            # 2. Escape the delimiter (@)
             escaped_value="${escaped_value//@/\\@}"
-            # 3. Escape ampersands (less common, but safe)
             escaped_value="${escaped_value//&/\\&}"
-            # Note: Forward slashes don't need escaping when using @ delimiter
 
-            # Perform substitution IN-PLACE on the temporary file
-            # Using -i is generally safe with mktemp files
             sed -i "s@${placeholder}@${escaped_value}@g" "$temp_file" || {
                 log_message "ERROR" "sed command failed during substitution for placeholder '$placeholder' in template '$template_path'."
-                rm -f "$temp_file" # Ensure cleanup
+                rm -f "$temp_file"
                 exit 1
             }
             ((substitutions_made++))
-            # Optional debugging log
-            # log_message "DEBUG" "Substituted '$placeholder' in '$temp_file'"
         fi
     done
 
     # Move the processed temp file to the final destination
-    # Use mv for atomic replacement if output_path exists
     mv "$temp_file" "$output_path" || {
         log_message "ERROR" "Failed to move processed temp file '$temp_file' to '$output_path'."
-        # temp_file might still exist if mv failed, ensure cleanup
         rm -f "$temp_file"
         exit 1
     }
@@ -199,8 +191,7 @@ process_template() {
     # Verify output file exists after move
     if [[ ! -f "$output_path" ]]; then
         log_message "ERROR" "Output file '$output_path' was not found after processing and move."
-        # temp_file should have been removed by mv, but double-check just in case
-        rm -f "$temp_file"
+        rm -f "$temp_file" # Should be gone, but check anyway
         exit 1
      fi
 
@@ -1183,7 +1174,6 @@ action_status() {
     echo "[Network]"
     ip addr show wlan0 | grep -E "inet |ssid" || echo " wlan0: No IP/SSID info found."
     ip addr show "${CONFIG[WIFI_AP_INTERFACE]:-uap0}" | grep "inet " || echo " ${CONFIG[WIFI_AP_INTERFACE]:-uap0}: No IP info found."
-    echo "AP_STA Script Dir: /opt/AP_STA_RPI_SAME_WIFI_CHIP"
     echo ""
 
     echo "[Services]"
