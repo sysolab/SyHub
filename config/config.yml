@@ -1,22 +1,71 @@
+# /home/<YOUR_USER>/syhub/config/config.yml
+# --- syHub Configuration ---
+# Ensure 2-space indentation. Quote values starting with special characters like '!'
+
 project:
-  name: plantomio
-  hostname: plantomio.local
-  wifi_ssid: plantomio_ap
-  wifi_password: plantomio123
-  sta_wifi_ssid: LiveLongAndRouter
-  sta_wifi_password: "!Pirjo2diPirjo2diPirjo2di"
-  mqtt:
-    uri: mqtt://plantomio.local
-    port: 1883
-    username: plantomioX1
-    client_id: plantomioX1
-    password: plantomioX1Pass
-    topic: v1/devices/me/telemetry
-  victoria_metrics:
-    port: 8428
-  node_red:
-    port: 1880
-  dashboard:
-    port: 5000
-  node_red_username: "admin"
-  node_red_password_hash: "$2b$08$W99V1mAwhUg5M9.hX6kjY.qtLHyvk1YbiXIMQ8T.xafDsGHNEa1Na"
+  name: plantomio            # Project name, used in dashboard title etc.
+
+hostname: plantomio.local     # mDNS hostname for accessing services (.local suffix)
+
+# --- System Setup ---
+# system_user: Automatically detected from user running 'sudo ./syhub.sh'
+# base_dir: Automatically set to /home/<system_user>/syhub
+log_file: /tmp/syhub_setup.log # Path for the setup script's detailed log
+backup_directory: backups     # Relative to base_dir for config/data backups
+
+# --- WiFi Access Point (AP) + Station (STA) Mode ---
+wifi:
+  ap_interface: uap0          # Interface name for the Access Point (verify from AP_STA_RPI_SAME_WIFI_CHIP script if necessary)
+  ap_ip: 192.168.77.1         # Static IP address for the AP interface on the Pi
+  ap_subnet_mask: 255.255.255.0 # Subnet mask for the AP network
+  ap_dhcp_range_start: 192.168.77.100 # Start of DHCP IP range for AP clients
+  ap_dhcp_range_end: 192.168.77.150   # End of DHCP IP range for AP clients
+  ap_dhcp_lease_time: 12h     # Lease time for DHCP clients (e.g., 12h, 1d)
+  ap_ssid: plantomio_ap       # SSID for the WiFi Access Point
+  ap_password: plantomio123   # Password for the AP (min 8 chars)
+
+  sta_ssid: "LiveLongAndRouter"   # <<--- REPLACE WITH YOUR ACTUAL ROUTER SSID
+  sta_password: "!nnnnnpass"      # <<--- REPLACE WITH YOUR ACTUAL ROUTER PASSWORD (use quotes!)
+
+# --- MQTT Broker (Mosquitto) ---
+mqtt:
+  # uri: Dynamically constructed as mqtt://<hostname>:<port>
+  port: 1883                  # Port for MQTT broker
+  username: plantomioX1         # MQTT username for clients (Node-RED, sensors)
+  client_id_base: plantomioX1 # Base for MQTT client IDs (Node-RED might append)
+  password: plantomioX1Pass     # MQTT password for the user
+  topic_telemetry: "v1/devices/me/telemetry" # MQTT topic for sensor data publishing
+
+# --- Time Series Database (VictoriaMetrics) ---
+victoria_metrics:
+  # Use release tags from: https://github.com/VictoriaMetrics/VictoriaMetrics/releases
+  # Ensure 'victoria-metrics-linux-arm64-<version>.tar.gz' exists for the chosen version
+  version: v1.115.0            # Version to download and install
+  port: 8428                  # Port for VictoriaMetrics HTTP API
+  data_directory: /var/lib/victoria-metrics # Storage location (requires sudo access)
+  retention_period: 1y        # Data retention period (e.g., 3m for 3 months, 1y for 1 year)
+  service_user: victoriametrics # Dedicated system user for running the service
+  service_group: victoriametrics # Dedicated system group
+
+# --- Data Processing (Node-RED) ---
+node_red:
+  port: 1880                  # Port for Node-RED editor/admin UI
+  # data_directory: Automatically set to <base_dir>/.node-red
+  memory_limit_mb: 256        # Max RAM for Node-RED process (MB)
+  username: "admin"           # Username for Node-RED admin UI
+  # Generate hash using: node -e "console.log(require('bcryptjs').hashSync(process.argv[1], 8));" YOUR_PASSWORD
+  # You need Node.js installed first. The setup script installs Node.js, or you can install it manually (`sudo apt install nodejs npm`).
+  # Then run: npm install bcryptjs ; node -e "console.log(require('bcryptjs').hashSync('YOUR_SECURE_PASSWORD', 8));"
+  # Example hash for password 'password': $2b$08$W99V1mAwhUg5M9.hX6kjY.qtLHyvk1YbiXIMQ8T.xafDsGHNEa1Na
+  password_hash: "$2b$08$W99V1mAwhUg5M9.hX6kjY.qtLHyvk1YbiXIMQ8T.xafDsGHNEa1Na" # <<--- REPLACE WITH YOUR SECURE HASH
+
+# --- Web Dashboard (Flask + Gunicorn) ---
+dashboard:
+  port: 5000                  # Port for the web dashboard
+  workers: 2                  # Number of Gunicorn worker processes (2 is reasonable for Pi 3B)
+  # venv_dir: Automatically set to <base_dir>/venv
+
+# --- Node.js Installation ---
+# Used by Node-RED installer script
+nodejs:
+  install_version: "lts"      # Install the latest Long Term Support version (e.g., 'lts', '18', '20')
