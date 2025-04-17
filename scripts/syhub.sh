@@ -200,18 +200,49 @@ install_packages() {
 
 # --- Core Setup Functions ---
 
+# --- Core Setup Functions ---
+
 setup_dependencies() {
     log_message "INFO" "Installing core dependencies..."
     # yq: For YAML parsing. Using binary download for consistency. Find latest at https://github.com/mikefarah/yq/releases
-    YQ_VERSION="v4.45.1" # Specify desired version
+    YQ_VERSION="v4.44.1" # Specify desired version
     YQ_BINARY="yq_linux_arm64"
     if ! command -v yq &> /dev/null || [[ "$(yq --version)" != *"$YQ_VERSION"* ]]; then
         log_message "INFO" "Installing yq ${YQ_VERSION}..."
-        wget "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/${YQ_BINARY}.tar.gz" -O /tmp/yq.tar.gz
-        tar xzf /tmp/yq.tar.gz -C /tmp
-        mv "/tmp/${YQ_BINARY}" /usr/local/bin/yq
+        wget "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/${YQ_BINARY}.tar.gz" -O /tmp/yq.tar.gz || {
+             log_message "ERROR" "Failed to download yq archive."
+             exit 1
+        }
+        # Extract directly into /tmp. We only care about the binary itself.
+        tar xzf /tmp/yq.tar.gz -C /tmp || {
+             log_message "ERROR" "Failed to extract yq archive."
+             # Clean up partial download before exiting
+             rm -f /tmp/yq.tar.gz
+             exit 1
+        }
+        # Check if the expected binary exists after extraction
+        if [[ ! -f "/tmp/${YQ_BINARY}" ]]; then
+            log_message "ERROR" "Expected yq binary '${YQ_BINARY}' not found in /tmp after extraction."
+             # Clean up archive and any other extracted files we know about
+            rm -f /tmp/yq.tar.gz /tmp/LICENSE /tmp/README.md
+            exit 1
+        fi
+
+        # Move the binary to the destination
+        mv "/tmp/${YQ_BINARY}" /usr/local/bin/yq || {
+             log_message "ERROR" "Failed to move yq binary to /usr/local/bin/yq."
+             # Clean up archive and any other extracted files
+             rm -f /tmp/yq.tar.gz /tmp/LICENSE /tmp/README.md
+             exit 1
+        }
         chmod +x /usr/local/bin/yq
-        rm /tmp/yq.tar.gz /tmp/LICENSE /tmp/README.md
+
+        # --- Robust Cleanup ---
+        # Use rm -f to forcefully remove files and ignore errors if they don't exist.
+        log_message "INFO" "Cleaning up temporary yq installation files..."
+        rm -f /tmp/yq.tar.gz /tmp/LICENSE /tmp/README.md
+        # --- End Robust Cleanup ---
+
         log_message "INFO" "yq installed: $(yq --version)"
     else
          log_message "INFO" "yq is already installed: $(yq --version)"
@@ -239,7 +270,18 @@ setup_dependencies() {
         exit 1
     fi
     # Now that yq is installed, setup proper logging using config value
-    setup_logging "setup"
+    # NOTE: setup_logging was called initially with a placeholder,
+    #       re-calling it here might re-initialize logs, which is fine,
+    #       or we can just read the log_file value and set the global LOG_FILE var.
+    #       Let's just set the variable directly if it hasn't been set properly yet.
+    if [[ "$LOG_FILE" == "/tmp/syhub_placeholder_log.log" ]]; then
+         LOG_FILE=$(config_get 'log_file' '/tmp/syhub_setup_default.log')
+         log_message "INFO" "Log file set to: $LOG_FILE"
+         # Re-apply redirection if needed (though initial exec should persist)
+         # exec > >(tee -a "$LOG_FILE")
+         # exec 2> >(tee -a "$LOG_FILE" >&2)
+    fi
+
 
     log_message "INFO" "Core dependencies installed."
 }
