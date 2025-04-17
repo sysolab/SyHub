@@ -1,8 +1,15 @@
+```bash
 #!/bin/bash
 
 # syhub.sh: Setup script for IoT monitoring system on Raspberry Pi
-# Version: 1.2.2
+# Version: 1.3.0
 # Manages WiFi AP+STA, Mosquitto, VictoriaMetrics, Node-RED, and Flask dashboard
+# Log file: /tmp/syhub_setup.log
+
+# Initialize logging
+LOG_FILE="/tmp/syhub_setup.log"
+exec 1>>"$LOG_FILE" 2>&1
+echo "Starting syhub.sh setup at $(date)"
 
 # Function to check if script is run as root
 check_root() {
@@ -25,18 +32,45 @@ set_user_home() {
     fi
 }
 
+# Function to handle apt locks
+wait_for_apt() {
+    local timeout=300
+    local elapsed=0
+    echo "Checking for apt locks..."
+    while [ $elapsed -lt $timeout ]; do
+        if ! pgrep -x "apt" > /dev/null && ! lsof /var/lib/dpkg/lock-frontend > /dev/null 2>&1; then
+            echo "No apt locks detected."
+            return 0
+        fi
+        echo "Waiting for apt lock to clear..."
+        sleep 5
+        elapsed=$((elapsed + 5))
+    done
+    echo "Timeout waiting for apt lock. Attempting to clear stale locks..."
+    sudo killall apt apt-get 2>/dev/null || true
+    sudo rm -f /var/lib/dpkg/lock-frontend /var/cache/apt/archives/lock
+    sudo dpkg --configure -a
+    echo "Apt locks cleared."
+}
+
 # Function to install and verify yq
 install_yq() {
+    echo "Checking for yq..."
     if ! command -v yq &> /dev/null || ! yq --version | grep -q "mikefarah/yq"; then
-        echo "Installing or updating yq (version 4.x)..."
+        echo "Installing yq (version 4.35.2)..."
+        wait_for_apt
         sudo apt update
-        wget https://github.com/mikefarah/yq/releases/download/v4.35.2/yq_linux_arm64 -O /usr/local/bin/yq || { echo "Failed to download yq"; exit 1; }
+        for attempt in {1..3}; do
+            wget https://github.com/mikefarah/yq/releases/download/v4.45.1/yq_linux_arm64 -O /usr/local/bin/yq && break
+            echo "Retry $attempt: Failed to download yq"
+            sleep 5
+        done || { echo "Failed to download yq after retries"; exit 1; }
         sudo chmod +x /usr/local/bin/yq
     fi
     YQ_VERSION=$(yq --version | awk '{print $NF}')
     echo "Detected yq version: $YQ_VERSION"
     if [[ ! "$YQ_VERSION" =~ ^v?4\.[0-9]+\.[0-9]+ ]]; then
-        echo "Error: yq version $YQ_VERSION is not supported. Requires version 4.x (e.g., 4.35.2)."
+        echo "Error: yq version $YQ_VERSION is not supported. Requires version 4.x."
         exit 1
     fi
 }
@@ -44,7 +78,6 @@ install_yq() {
 # Function to load configuration from config.yml
 load_config() {
     install_yq
-
     CONFIG_FILE="$USER_HOME/syhub/config/config.yml"
     echo "Loading configuration from $CONFIG_FILE..."
     if [ ! -f "$CONFIG_FILE" ]; then
@@ -119,24 +152,27 @@ load_config() {
 # Function to set up WiFi Access Point + Station
 setup_wifi_ap() {
     echo "Setting up WiFi AP+STA using AP_STA_RPI_SAME_WIFI_CHIP..."
-    sudo apt update
-    sudo apt install -y git hostapd dnsmasq avahi-daemon wpasupplicant || { echo "Failed to install WiFi dependencies"; exit 1; }
-
-    # Verify dnsmasq service exists
-    if ! systemctl list-units --full -all | grep -q "dnsmasq.service"; then
-        echo "dnsmasq service not found, reinstalling..."
-        sudo apt install --reinstall -y dnsmasq || { echo "Failed to reinstall dnsmasq"; exit 1; }
+    wait_for_apt
+    sudo DEBIAN_FRONTEND=noninteractive apt update
+    if [ -f /etc/dnsmasq.conf ]; then
+        echo "Backing up existing /etc/dnsmasq.conf..."
+        sudo mv /etc/dnsmasq.conf /etc/dnsmasq.conf.bak-$(date +%F)
     fi
+    sudo DEBIAN_FRONTEND=noninteractive apt install -y git hostapd dnsmasq avahi-daemon wpasupplicant || { echo "Failed to install WiFi dependencies"; exit 1; }
 
     # Clone AP_STA_RPI_SAME_WIFI_CHIP repository
     if [ ! -d "/tmp/AP_STA_RPI_SAME_WIFI_CHIP" ]; then
-        git clone https://github.com/MkLHX/AP_STA_RPI_SAME_WIFI_CHIP.git /tmp/AP_STA_RPI_SAME_WIFI_CHIP || { echo "Failed to clone AP_STA_RPI_SAME_WIFI_CHIP"; exit 1; }
+        for attempt in {1..3}; do
+            git clone https://github.com/MkLHX/AP_STA_RPI_SAME_WIFI_CHIP.git /tmp/AP_STA_RPI_SAME_WIFI_CHIP && break
+            echo "Retry $attempt: Failed to clone AP_STA_RPI_SAME_WIFI_CHIP"
+            sleep 5
+        done || { echo "Failed to clone AP_STA_RPI_SAME_WIFI_CHIP after retries"; exit 1; }
     fi
 
     # Configure AP mode (hostapd)
-    envsubst < $USER_HOME/syhub/templates/hostapd.conf.j2 > /tmp/AP_STA_RPI_SAME_WIFI_CHIP/config/hostapd.conf
-    envsubst < $USER_HOME/syhub/templates/dnsmasq.conf.j2 > /tmp/AP_STA_RPI_SAME_WIFI_CHIP/config/dnsmasq.conf
-    envsubst < $USER_HOME/syhub/templates/dhcpcd.conf.j2 > /etc/dhcpcd.conf
+    envsubst < "$USER_HOME/syhub/templates/hostapd.conf.j2" > /tmp/AP_STA_RPI_SAME_WIFI_CHIP/config/hostapd.conf
+    envsubst < "$USER_HOME/syhub/templates/dnsmasq.conf.j2" > /tmp/AP_STA_RPI_SAME_WIFI_CHIP/config/dnsmasq.conf
+    envsubst < "$USER_HOME/syhub/templates/dhcpcd.conf.j2" > /etc/dhcpcd.conf
 
     # Configure STA mode (wpa_supplicant)
     cat << EOF > /tmp/AP_STA_RPI_SAME_WIFI_CHIP/config/wpa_supplicant.conf
@@ -163,12 +199,14 @@ EOF
 # Function to install Mosquitto
 install_mosquitto() {
     echo "Installing Mosquitto MQTT Broker..."
-    sudo apt install -y mosquitto mosquitto-clients || { echo "Failed to install Mosquitto"; exit 1; }
+    wait_for_apt
+    sudo DEBIAN_FRONTEND=noninteractive apt install -y mosquitto mosquitto-clients || { echo "Failed to install Mosquitto"; exit 1; }
 
     # Configure Mosquitto
-    envsubst < $USER_HOME/syhub/templates/mosquitto.conf.j2 > /etc/mosquitto/mosquitto.conf
+    envsubst < "$USER_HOME/syhub/templates/mosquitto.conf.j2" > /etc/mosquitto/mosquitto.conf
     sudo chmod 644 /etc/mosquitto/mosquitto.conf
-    sudo mosquitto_passwd -c /etc/mosquitto/passwd "$MQTT_USERNAME" <<< "$MQTT_PASSWORD"
+    echo "$MQTT_USERNAME:$MQTT_PASSWORD" | sudo tee /etc/mosquitto/passwd > /dev/null
+    sudo mosquitto_passwd -U /etc/mosquitto/passwd
     sudo chmod 600 /etc/mosquitto/passwd
 
     sudo systemctl enable mosquitto
@@ -179,14 +217,17 @@ install_mosquitto() {
 install_victoria_metrics() {
     echo "Installing VictoriaMetrics..."
     if [ ! -f "/usr/local/bin/victoria-metrics" ]; then
-        wget https://github.com/VictoriaMetrics/VictoriaMetrics/releases/download/v1.115.0/victoria-metrics-linux-arm64-v1.115.0.tar.gz || { echo "Failed to download VictoriaMetrics"; exit 1; }
-        tar -xzf victoria-metrics-linux-arm.tar.gz
-        sudo mv victoria-metrics-linux-arm/victoria-metrics /usr/local/bin/
-        rm -rf victoria-metrics-linux-arm*
+        for attempt in {1..3}; do
+            wget https://github.com/VictoriaMetrics/VictoriaMetrics/releases/download/v1.115.0/victoria-metrics-linux-arm64-v1.115.0.tar.gz -O /tmp/vm.tar.gz && break
+            echo "Retry $attempt: Failed to download VictoriaMetrics"
+            sleep 5
+        done || { echo "Failed to download VictoriaMetrics after retries"; exit 1; }
+        sudo tar -xzf /tmp/vm.tar.gz -C /usr/local/bin
+        sudo rm /tmp/vm.tar.gz
     fi
 
     # Configure VictoriaMetrics
-    envsubst < $USER_HOME/syhub/templates/victoria_metrics.yml.j2 > /etc/victoriametrics.yml
+    envsubst < "$USER_HOME/syhub/templates/victoria_metrics.yml.j2" > /etc/victoriametrics.yml
     sudo chmod 644 /etc/victoriametrics.yml
 
     # Create systemd service
@@ -203,6 +244,7 @@ Restart=always
 WantedBy=multi-user.target
 EOF
 
+    sudo systemctl daemon-reload
     sudo systemctl enable victoriametrics
     sudo systemctl start victoriametrics || { echo "Failed to start VictoriaMetrics"; exit 1; }
 }
@@ -210,7 +252,8 @@ EOF
 # Function to install Node-RED
 install_node_red() {
     echo "Installing Node-RED..."
-    sudo apt install -y nodejs npm || { echo "Failed to install Node.js and npm"; exit 1; }
+    wait_for_apt
+    sudo DEBIAN_FRONTEND=noninteractive apt install -y nodejs npm || { echo "Failed to install Node.js and npm"; exit 1; }
     sudo npm install -g --unsafe-perm node-red@latest || { echo "Failed to install Node-RED"; exit 1; }
     sudo npm audit fix -g || echo "Some Node-RED vulnerabilities could not be fixed automatically; run 'npm audit' for details."
 
@@ -293,12 +336,21 @@ EOF
 # Function to install Flask Dashboard
 install_dashboard() {
     echo "Installing Flask Dashboard..."
-    sudo apt install -y python3-pip || { echo "Failed to install pip"; exit 1; }
-    pip3 install flask gunicorn paho-mqtt requests psutil || { echo "Failed to install Python packages"; exit 1; }
+    wait_for_apt
+    sudo DEBIAN_FRONTEND=noninteractive apt install -y python3-pip python3-venv || { echo "Failed to install pip and venv"; exit 1; }
+
+    # Create and activate virtual environment
+    VENV_DIR="$USER_HOME/syhub/venv"
+    if [ ! -d "$VENV_DIR" ]; then
+        python3 -m venv "$VENV_DIR"
+    fi
+    source "$VENV_DIR/bin/activate"
+    pip install flask gunicorn paho-mqtt requests psutil || { echo "Failed to install Python packages"; deactivate; exit 1; }
+    deactivate
 
     # Deploy Flask app
-    cp $USER_HOME/syhub/templates/flask_app.py $USER_HOME/syhub/flask_app_deployed.py
-    sudo chmod 644 $USER_HOME/syhub/flask_app_deployed.py
+    cp "$USER_HOME/syhub/templates/flask_app.py" "$USER_HOME/syhub/flask_app_deployed.py"
+    sudo chmod 644 "$USER_HOME/syhub/flask_app_deployed.py"
 
     # Create systemd service
     cat << EOF > /etc/systemd/system/flask-dashboard.service
@@ -309,13 +361,14 @@ After=network.target
 [Service]
 User=pi
 WorkingDirectory=$USER_HOME/syhub
-ExecStart=/usr/local/bin/gunicorn -w 4 -b 0.0.0.0:$DASHBOARD_PORT flask_app_deployed:app
+ExecStart=$VENV_DIR/bin/gunicorn -w 4 -b 0.0.0.0:$DASHBOARD_PORT flask_app_deployed:app
 Restart=always
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
+    sudo systemctl daemon-reload
     sudo systemctl enable flask-dashboard
     sudo systemctl start flask-dashboard || { echo "Failed to start Flask dashboard"; exit 1; }
 }
@@ -323,13 +376,9 @@ EOF
 # Function to check status
 status() {
     echo "Checking system status..."
-    sudo systemctl status hostapd
-    sudo systemctl status dnsmasq
-    sudo systemctl status avahi-daemon
-    sudo systemctl status mosquitto
-    sudo systemctl status victoriametrics
-    sudo systemctl status nodered
-    sudo systemctl status flask-dashboard
+    for service in hostapd dnsmasq avahi-daemon mosquitto victoriametrics nodered flask-dashboard; do
+        sudo systemctl status "$service" --no-pager || true
+    done
 }
 
 # Main setup function
@@ -337,12 +386,12 @@ setup() {
     check_root
     set_user_home
     load_config
-    setup_wifi_ap &
-    install_mosquitto &
-    install_victoria_metrics &
-    install_node_red &
-    install_dashboard &
-    wait
+    echo "Starting sequential setup..."
+    setup_wifi_ap
+    install_mosquitto
+    install_victoria_metrics
+    install_node_red
+    install_dashboard
     echo "Setup complete! Reboot recommended."
     read -p "Reboot now? [Y/n]: " reboot
     if [[ "$reboot" != "n" && "$reboot" != "N" ]]; then
@@ -354,30 +403,45 @@ setup() {
 update() {
     set_user_home
     echo "Updating system..."
-    sudo apt update
-    sudo apt upgrade -y
-    pip3 install --upgrade flask gunicorn paho-mqtt requests psutil
+    wait_for_apt
+    sudo DEBIAN_FRONTEND=noninteractive apt update
+    sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y
+    VENV_DIR="$USER_HOME/syhub/venv"
+    if [ -d "$VENV_DIR" ]; then
+        source "$VENV_DIR/bin/activate"
+        pip install --upgrade flask gunicorn paho-mqtt requests psutil
+        deactivate
+    fi
     sudo npm install -g --unsafe-perm node-red@latest
     sudo npm audit fix -g
+    sudo systemctl restart mosquitto victoriametrics nodered flask-dashboard
 }
 
 # Function to purge system
 purge() {
     set_user_home
     echo "Purging system..."
-    sudo systemctl stop hostapd dnsmasq avahi-daemon mosquitto victoriametrics nodered flask-dashboard
-    sudo systemctl disable hostapd dnsmasq avahi-daemon mosquitto victoriametrics nodered flask-dashboard
-    sudo apt remove -y hostapd dnsmasq avahi-daemon mosquitto mosquitto-clients nodejs npm python3-pip wpasupplicant
+    sudo systemctl stop hostapd dnsmasq avahi-daemon mosquitto victoriametrics nodered flask-dashboard 2>/dev/null || true
+    sudo systemctl disable hostapd dnsmasq avahi-daemon mosquitto victoriametrics nodered flask-dashboard 2>/dev/null || true
+    wait_for_apt
+    sudo DEBIAN_FRONTEND=noninteractive apt remove -y --purge hostapd dnsmasq avahi-daemon mosquitto mosquitto-clients nodejs npm python3-pip python3-venv wpasupplicant
+    sudo DEBIAN_FRONTEND=noninteractive apt autoremove -y
     sudo rm -rf /usr/local/bin/victoria-metrics /etc/victoriametrics.yml /var/lib/victoria-metrics
     sudo rm -rf /home/pi/.node-red
+    sudo rm -rf "$USER_HOME/syhub/venv"
     sudo rm -f /etc/systemd/system/flask-dashboard.service
+    sudo rm -f /etc/mosquitto/mosquitto.conf /etc/mosquitto/passwd
+    sudo rm -rf /tmp/AP_STA_RPI_SAME_WIFI_CHIP
 }
 
 # Function to backup system
 backup() {
     set_user_home
     echo "Backing up system..."
-    tar -czf $USER_HOME/syhub_backup_$(date +%F).tar.gz $USER_HOME/syhub
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    mkdir -p "$USER_HOME/backups"
+    tar -czf "$USER_HOME/backups/syhub_backup_$timestamp.tar.gz" "$USER_HOME/syhub"
+    echo "Backup created at $USER_HOME/backups/syhub_backup_$timestamp.tar.gz"
 }
 
 # Main script logic
@@ -402,3 +466,6 @@ case "$1" in
         exit 1
         ;;
 esac
+
+echo "Script completed at $(date)"
+```
