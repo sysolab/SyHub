@@ -11,6 +11,19 @@ check_root() {
     fi
 }
 
+# Function to set user home directory
+set_user_home() {
+    if [ -n "$SUDO_USER" ]; then
+        USER_HOME="/home/$SUDO_USER"
+    else
+        USER_HOME="$HOME"
+    fi
+    if [ ! -d "$USER_HOME" ]; then
+        echo "User home directory $USER_HOME not found!"
+        exit 1
+    fi
+}
+
 # Function to load configuration from config.yml
 load_config() {
     if ! command -v yq &> /dev/null; then
@@ -19,7 +32,7 @@ load_config() {
         sudo apt install -y yq || { echo "Failed to install yq"; exit 1; }
     fi
 
-    CONFIG_FILE="$HOME/syhub/config/config.yml"
+    CONFIG_FILE="$USER_HOME/syhub/config/config.yml"
     if [ ! -f "$CONFIG_FILE" ]; then
         echo "Config file $CONFIG_FILE not found!"
         exit 1
@@ -65,9 +78,9 @@ setup_wifi_ap() {
     fi
 
     # Configure AP mode (hostapd)
-    envsubst < $HOME/syhub/templates/hostapd.conf.j2 > /tmp/AP_STA_RPI_SAME_WIFI_CHIP/config/hostapd.conf
-    envsubst < $HOME/syhub/templates/dnsmasq.conf.j2 > /tmp/AP_STA_RPI_SAME_WIFI_CHIP/config/dnsmasq.conf
-    envsubst < $HOME/syhub/templates/dhcpcd.conf.j2 > /etc/dhcpcd.conf
+    envsubst < $USER_HOME/syhub/templates/hostapd.conf.j2 > /tmp/AP_STA_RPI_SAME_WIFI_CHIP/config/hostapd.conf
+    envsubst < $USER_HOME/syhub/templates/dnsmasq.conf.j2 > /tmp/AP_STA_RPI_SAME_WIFI_CHIP/config/dnsmasq.conf
+    envsubst < $USER_HOME/syhub/templates/dhcpcd.conf.j2 > /etc/dhcpcd.conf
 
     # Configure STA mode (wpa_supplicant)
     cat << EOF > /tmp/AP_STA_RPI_SAME_WIFI_CHIP/config/wpa_supplicant.conf
@@ -97,7 +110,7 @@ install_mosquitto() {
     sudo apt install -y mosquitto mosquitto-clients || { echo "Failed to install Mosquitto"; exit 1; }
 
     # Configure Mosquitto
-    envsubst < $HOME/syhub/templates/mosquitto.conf.j2 > /etc/mosquitto/mosquitto.conf
+    envsubst < $USER_HOME/syhub/templates/mosquitto.conf.j2 > /etc/mosquitto/mosquitto.conf
     sudo chmod 644 /etc/mosquitto/mosquitto.conf
     sudo mosquitto_passwd -c /etc/mosquitto/passwd "$MQTT_USERNAME" <<< "$MQTT_PASSWORD"
     sudo chmod 600 /etc/mosquitto/passwd
@@ -117,7 +130,7 @@ install_victoria_metrics() {
     fi
 
     # Configure VictoriaMetrics
-    envsubst < $HOME/syhub/templates/victoria_metrics.yml.j2 > /etc/victoriametrics.yml
+    envsubst < $USER_HOME/syhub/templates/victoria_metrics.yml.j2 > /etc/victoriametrics.yml
     sudo chmod 644 /etc/victoriametrics.yml
 
     # Create systemd service
@@ -228,8 +241,8 @@ install_dashboard() {
     pip3 install flask gunicorn paho-mqtt requests psutil || { echo "Failed to install Python packages"; exit 1; }
 
     # Deploy Flask app
-    cp $HOME/syhub/templates/flask_app.py $HOME/syhub/flask_app_deployed.py
-    sudo chmod 644 $HOME/syhub/flask_app_deployed.py
+    cp $USER_HOME/syhub/templates/flask_app.py $USER_HOME/syhub/flask_app_deployed.py
+    sudo chmod 644 $USER_HOME/syhub/flask_app_deployed.py
 
     # Create systemd service
     cat << EOF > /etc/systemd/system/flask-dashboard.service
@@ -239,7 +252,7 @@ After=network.target
 
 [Service]
 User=pi
-WorkingDirectory=$HOME/syhub
+WorkingDirectory=$USER_HOME/syhub
 ExecStart=/usr/local/bin/gunicorn -w 4 -b 0.0.0.0:$DASHBOARD_PORT flask_app_deployed:app
 Restart=always
 
@@ -266,6 +279,7 @@ status() {
 # Main setup function
 setup() {
     check_root
+    set_user_home
     load_config
     setup_wifi_ap &
     install_mosquitto &
@@ -282,6 +296,7 @@ setup() {
 
 # Function to update system
 update() {
+    set_user_home
     echo "Updating system..."
     sudo apt update
     sudo apt upgrade -y
@@ -292,6 +307,7 @@ update() {
 
 # Function to purge system
 purge() {
+    set_user_home
     echo "Purging system..."
     sudo systemctl stop hostapd dnsmasq avahi-daemon mosquitto victoriametrics nodered flask-dashboard
     sudo systemctl disable hostapd dnsmasq avahi-daemon mosquitto victoriametrics nodered flask-dashboard
@@ -303,8 +319,9 @@ purge() {
 
 # Function to backup system
 backup() {
+    set_user_home
     echo "Backing up system..."
-    tar -czf $HOME/syhub_backup_$(date +%F).tar.gz $HOME/syhub
+    tar -czf $USER_HOME/syhub_backup_$(date +%F).tar.gz $USER_HOME/syhub
 }
 
 # Main script logic
