@@ -132,80 +132,79 @@ check_internet() {
     fi
 }
 
-# Process a template file using sed for simple substitution
-# Process a template file using sed for simple substitution
+# Process a template file using sed for simple substitution (one by one)
 process_template() {
     local template_path="$1"
     local output_path="$2"
     local temp_file
 
     if [[ ! -f "$template_path" ]]; then
-        log_message "ERROR" "Template file not found: $template_path"
+        log_message "ERROR" "Template file not found: '$template_path'"
         exit 1
     fi
 
+    # Create a temporary copy to work on
     temp_file=$(mktemp)
-    # Use cat instead of cp to handle potential edge cases with special files
-    cat "$template_path" > "$temp_file" || { log_message "ERROR" "Failed to copy template '$template_path' to temp file."; rm -f "$temp_file"; exit 1; }
+    cp "$template_path" "$temp_file" || {
+        log_message "ERROR" "Failed to copy template '$template_path' to temp file '$temp_file'."
+        rm -f "$temp_file" # Ensure cleanup
+        exit 1
+    }
 
+    log_message "INFO" "Processing template '$template_path' -> '$output_path'"
 
-    log_message "INFO" "Processing template $template_path -> $output_path"
-
-    # Dynamically create sed expressions for all loaded config variables
-    local sed_expressions=""
     mapfile -t config_keys < <(printf "%s\n" "${!CONFIG[@]}")
+    local substitutions_made=0
 
+    # Iterate through all known configuration keys
     for key_upper in "${config_keys[@]}"; do
-         # Placeholder format: __KEY_UPPER__
-         placeholder="__${key_upper}__"
-         # Check if the placeholder actually exists in the template file before adding expression
-         # This prevents unnecessary processing and potential errors for unused placeholders
-         if grep -q "$placeholder" "$temp_file"; then
-             value="${CONFIG[$key_upper]}"
-             # Escape sed special characters: / & \ and the chosen delimiter @
-             # 1. Escape backslashes first
-             escaped_value="${value//\\/\\\\}"
-             # 2. Escape the delimiter (@)
-             escaped_value="${escaped_value//@/\\@}"
-             # 3. Escape forward slashes
-             escaped_value="${escaped_value//\//\\/}"
-             # 4. Escape ampersands
-             escaped_value="${escaped_value//&/\\&}"
+        local placeholder="__${key_upper}__"
 
-             # Add sed expression using @ as delimiter. Quote the placeholder and escaped value.
-             # The 'g' flag replaces all occurrences on a line.
-             sed_expressions+=" -e s@${placeholder}@${escaped_value}@g"
-             # Log the replacement being added (optional, can be noisy)
-             # log_message "DEBUG" "Adding sed rule: s@${placeholder}@...value_hidden...@g"
-         fi
+        # Check if the placeholder exists in the current state of the temp file
+        # Use grep -q for efficiency
+        if grep -q "$placeholder" "$temp_file"; then
+            local value="${CONFIG[$key_upper]}"
+
+            # Escape characters for sed's 's' command (delimiter @ chosen)
+            # 1. Escape backslashes first
+            local escaped_value="${value//\\/\\\\}"
+            # 2. Escape the delimiter (@)
+            escaped_value="${escaped_value//@/\\@}"
+            # 3. Escape ampersands (less common, but safe)
+            escaped_value="${escaped_value//&/\\&}"
+            # Note: Forward slashes don't need escaping when using @ delimiter
+
+            # Perform substitution IN-PLACE on the temporary file
+            # Using -i is generally safe with mktemp files
+            sed -i "s@${placeholder}@${escaped_value}@g" "$temp_file" || {
+                log_message "ERROR" "sed command failed during substitution for placeholder '$placeholder' in template '$template_path'."
+                rm -f "$temp_file" # Ensure cleanup
+                exit 1
+            }
+            ((substitutions_made++))
+            # Optional debugging log
+            # log_message "DEBUG" "Substituted '$placeholder' in '$temp_file'"
+        fi
     done
 
-    # Check if any expressions were generated
-    if [[ -z "$sed_expressions" ]]; then
-         log_message "INFO" "No placeholders found in template '$template_path'. Copying directly."
-         cp "$temp_file" "$output_path"
-    else
-        # Execute sed with all expressions. Quote the expression string variable.
-        # Using eval here allows the shell to correctly parse the multiple -e options.
-        # Ensure security: We escaped potentially harmful characters above.
-        eval sed "$sed_expressions" "$temp_file" > "$output_path" || {
-             log_message "ERROR" "Sed command failed while processing template '$template_path'."
-             # Log the expressions for debugging (careful with secrets if not redacted)
-             # log_message "ERROR" "Sed expressions used: ${sed_expressions}"
-             rm -f "$temp_file"
-             exit 1
-        }
-    fi
+    # Move the processed temp file to the final destination
+    # Use mv for atomic replacement if output_path exists
+    mv "$temp_file" "$output_path" || {
+        log_message "ERROR" "Failed to move processed temp file '$temp_file' to '$output_path'."
+        # temp_file might still exist if mv failed, ensure cleanup
+        rm -f "$temp_file"
+        exit 1
+    }
 
-    # Verify output file was created
-     if [[ ! -f "$output_path" ]]; then
-        log_message "ERROR" "Output file '$output_path' was not created after processing template '$template_path'."
+    # Verify output file exists after move
+    if [[ ! -f "$output_path" ]]; then
+        log_message "ERROR" "Output file '$output_path' was not found after processing and move."
+        # temp_file should have been removed by mv, but double-check just in case
         rm -f "$temp_file"
         exit 1
      fi
 
-    rm "$temp_file"
-    log_message "INFO" "Generated $output_path"
+    log_message "INFO" "Generated '$output_path' ($substitutions_made substitutions applied)"
 }
 
 # Install packages if they are not already installed
