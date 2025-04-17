@@ -15,17 +15,17 @@ backup_directory: backups     # Relative to base_dir for config/data backups
 
 # --- WiFi Access Point (AP) + Station (STA) Mode ---
 wifi:
-  ap_interface: uap0          # Interface name for the Access Point (verify from AP_STA_RPI_SAME_WIFI_CHIP script if necessary)
-  ap_ip: 192.168.77.1         # Static IP address for the AP interface on the Pi
-  ap_subnet_mask: 255.255.255.0 # Subnet mask for the AP network
-  ap_dhcp_range_start: 192.168.77.100 # Start of DHCP IP range for AP clients
-  ap_dhcp_range_end: 192.168.77.150   # End of DHCP IP range for AP clients
-  ap_dhcp_lease_time: 12h     # Lease time for DHCP clients (e.g., 12h, 1d)
-  ap_ssid: plantomio_ap       # SSID for the WiFi Access Point
-  ap_password: plantomio123   # Password for the AP (min 8 chars)
-
-  sta_ssid: "LiveLongAndRouter"   # <<--- REPLACE WITH YOUR ACTUAL ROUTER SSID
-  sta_password: "!nnnnnpass"      # <<--- REPLACE WITH YOUR ACTUAL ROUTER PASSWORD (use quotes!)
+  ap_interface: uap0
+  ap_ip: 192.168.77.1
+  ap_subnet_mask: 255.255.255.0
+  ap_dhcp_range_start: 192.168.77.100
+  ap_dhcp_range_end: 192.168.77.150
+  ap_dhcp_lease_time: 12h
+  ap_ssid: plantomio_ap
+  ap_password: plantomio123
+  country_code: "DE"          # <<--- ADD THIS LINE (Replace GB with your 2-letter country code)
+  sta_ssid: "LiveLongAndRouter"
+  sta_password: "!Pirjo2diPirjo2diPirjo2di"
 
 # --- MQTT Broker (Mosquitto) ---
 mqtt:

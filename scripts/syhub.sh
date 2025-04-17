@@ -296,7 +296,7 @@ load_all_config() {
         "hostname"
         "log_file"
         "backup_directory"
-        "wifi.ap_interface" "wifi.ap_ip" "wifi.ap_subnet_mask" "wifi.ap_dhcp_range_start" "wifi.ap_dhcp_range_end" "wifi.ap_dhcp_lease_time" "wifi.ap_ssid" "wifi.ap_password"
+        "wifi.ap_interface" "wifi.ap_ip" "wifi.ap_subnet_mask" "wifi.ap_dhcp_range_start" "wifi.ap_dhcp_range_end" "wifi.ap_dhcp_lease_time" "wifi.ap_ssid" "wifi.ap_password" "wifi.country_code" # <-- Added country_code
         "wifi.sta_ssid" "wifi.sta_password"
         "mqtt.port" "mqtt.username" "mqtt.client_id_base" "mqtt.password" "mqtt.topic_telemetry"
         "victoria_metrics.version" "victoria_metrics.port" "victoria_metrics.data_directory" "victoria_metrics.retention_period" "victoria_metrics.service_user" "victoria_metrics.service_group"
@@ -330,109 +330,224 @@ load_all_config() {
 }
 
 
+# Function to set up WiFi AP+STA Mode, Hostname, AP services, and mDNS
 setup_network() {
-    log_message "INFO" "Setting up WiFi AP+STA Mode..."
+    log_message "INFO" "--- Starting Network Setup ---"
 
     # --- Configure system hostname ---
     log_message "INFO" "Setting hostname to ${CONFIG[HOSTNAME]}"
-    hostnamectl set-hostname "${CONFIG[HOSTNAME]}"
-    # Update /etc/hosts for local resolution
-    sed -i "s/127.0.1.1.*/127.0.1.1\t${CONFIG[HOSTNAME]}/g" /etc/hosts
+    # Check current hostname
+    local current_hostname
+    current_hostname=$(hostnamectl status --static)
+    if [[ "$current_hostname" != "${CONFIG[HOSTNAME]}" ]]; then
+        hostnamectl set-hostname "${CONFIG[HOSTNAME]}"
+        log_message "INFO" "Hostname updated."
+        # Update /etc/hosts for local resolution (handle potential existing entries)
+        if grep -q "127.0.1.1" /etc/hosts; then
+            sed -i "s/^\(127\.0\.1\.1\s*\).*/\1${CONFIG[HOSTNAME]}/" /etc/hosts
+        else
+            # Add entry if 127.0.1.1 doesn't exist (less common)
+            echo "127.0.1.1    ${CONFIG[HOSTNAME]}" >> /etc/hosts
+        fi
+        log_message "INFO" "/etc/hosts updated for ${CONFIG[HOSTNAME]}."
+    else
+        log_message "INFO" "Hostname already set to ${CONFIG[HOSTNAME]}."
+    fi
 
-    # --- Use AP_STA_RPI_SAME_WIFI_CHIP script ---
-    # This external script is crucial and handles the complexities of
-    # setting up simultaneous AP and STA mode on the Pi's single chip.
-    # It typically modifies /etc/dhcpcd.conf, /etc/network/interfaces.d/,
-    # sets up wpa_supplicant for STA, and might install additional helpers.
+
+    # --- Use AP_STA_RPI_SAME_WIFI_CHIP script (MkLHX fork) ---
+    log_message "INFO" "Configuring AP+STA Mode using external script..."
     local ap_sta_script_dir="/opt/AP_STA_RPI_SAME_WIFI_CHIP"
+    # Using the MkLHX fork as identified
     local ap_sta_repo="https://github.com/MkLHX/AP_STA_RPI_SAME_WIFI_CHIP.git"
 
-    if [[ ! -d "$ap_sta_script_dir" ]]; then
+    # Clone or update the repository
+    if [[ ! -d "$ap_sta_script_dir/.git" ]]; then # Check for .git to ensure it's a repo
         log_message "INFO" "Cloning AP_STA_RPI_SAME_WIFI_CHIP script from $ap_sta_repo..."
-        git clone "$ap_sta_repo" "$ap_sta_script_dir"
+        # Remove directory if it exists but isn't a git repo
+        if [[ -d "$ap_sta_script_dir" ]]; then
+             log_message "WARNING" "$ap_sta_script_dir exists but is not a git repository. Removing."
+             rm -rf "$ap_sta_script_dir"
+        fi
+        git clone "$ap_sta_repo" "$ap_sta_script_dir" || { log_message "ERROR" "Failed to clone AP_STA script repository."; exit 1; }
     else
         log_message "INFO" "AP_STA_RPI_SAME_WIFI_CHIP script found at $ap_sta_script_dir. Updating..."
-        (cd "$ap_sta_script_dir" && git pull)
+        # Stash local changes (if any) before pulling to avoid conflicts
+        (cd "$ap_sta_script_dir" && git stash push --quiet --include-untracked && git pull) || log_message "WARNING" "Failed to update AP_STA script repository. Proceeding with existing version."
     fi
 
-    # Run the installation script provided by the repo
-    # IMPORTANT: Review this script's actions and required parameters.
-    # We pass STA credentials via environment variables if the script supports it.
-    # The script MUST configure the AP interface (__WIFI_AP_INTERFACE__) with the static IP (__WIFI_AP_IP__).
-    # If it doesn't, we might need to add the static IP config to dhcpcd.conf manually *after* this script runs.
-    log_message "INFO" "Running AP_STA_RPI_SAME_WIFI_CHIP install script..."
-    log_message "INFO" "Using STA SSID: ${CONFIG[WIFI_STA_SSID]}"
-    # Note: Passing password on command line is insecure, but often required by such scripts.
-    # Consider alternatives if the script allows (e.g., config file).
+    # Check if the setup script exists
+    if [[ ! -f "$ap_sta_script_dir/setup.sh" ]]; then
+        log_message "ERROR" "Setup script '$ap_sta_script_dir/setup.sh' not found in the cloned repository."
+        exit 1
+    fi
+
+    # Execute the setup.sh script with parameters from config.yml
+    log_message "INFO" "Running AP_STA_RPI_SAME_WIFI_CHIP setup script (setup.sh)..."
+    log_message "INFO" " -> STA SSID: ${CONFIG[WIFI_STA_SSID]}"
+    log_message "INFO" " -> AP SSID: ${CONFIG[WIFI_AP_SSID]}"
+    log_message "INFO" " -> AP IP: ${CONFIG[WIFI_AP_IP]}"
+    log_message "INFO" " -> Country Code: ${CONFIG[WIFI_COUNTRY_CODE]}"
+    log_message "INFO" " -> AP Interface: ${CONFIG[WIFI_AP_INTERFACE]}" # For logging, script might determine this itself
+
+    # Run setup.sh within its directory
     (cd "$ap_sta_script_dir" && \
-        SSID="${CONFIG[WIFI_STA_SSID]}" \
-        PSK="${CONFIG[WIFI_STA_PASSWORD]}" \
-        bash install.sh --interactive no --sta_ssid "${CONFIG[WIFI_STA_SSID]}" --sta_psk "${CONFIG[WIFI_STA_PASSWORD]}" \
-    ) || { log_message "ERROR" "AP_STA_RPI_SAME_WIFI_CHIP installation failed. Check its logs."; exit 1; }
+     bash setup.sh \
+        --interactive no \
+        --sta_ssid "${CONFIG[WIFI_STA_SSID]}" \
+        --sta_psk "${CONFIG[WIFI_STA_PASSWORD]}" \
+        --ap_ssid "${CONFIG[WIFI_AP_SSID]}" \
+        --ap_psk "${CONFIG[WIFI_AP_PASSWORD]}" \
+        --country "${CONFIG[WIFI_COUNTRY_CODE]}" \
+        --ap_ip "${CONFIG[WIFI_AP_IP]}" \
+        # Potentially add --ap_interface "${CONFIG[WIFI_AP_INTERFACE]}" if needed/supported
+        # Potentially add --ap_subnet "${CONFIG[WIFI_AP_SUBNET_MASK]}" if needed/supported
+    ) || { log_message "ERROR" "AP_STA_RPI_SAME_WIFI_CHIP setup script (setup.sh) failed. Check its logs/output above."; exit 1; }
 
-    log_message "INFO" "AP_STA_RPI_SAME_WIFI_CHIP script finished. Verification needed."
-    # Verification: Check if the uap0 interface exists and has the expected IP.
-    # sleep 5 # Give network time to settle
-    # if ! ip addr show "${CONFIG[WIFI_AP_INTERFACE]}" | grep -q "inet ${CONFIG[WIFI_AP_IP]}"; then
-    #    log_message "WARNING" "AP Interface ${CONFIG[WIFI_AP_INTERFACE]} does not have IP ${CONFIG[WIFI_AP_IP]} after script run. Manual config might be needed or script failed."
-    #    # Attempt manual configuration in dhcpcd.conf (potential conflict with script!)
-    #    # echo "interface ${CONFIG[WIFI_AP_INTERFACE]}" >> /etc/dhcpcd.conf
-    #    # echo "static ip_address=${CONFIG[WIFI_AP_IP]}/${CONFIG[WIFI_AP_SUBNET_MASK]#* }" >> /etc/dhcpcd.conf # Extract CIDR suffix? No, use mask
-    #    # Need to calculate CIDR from mask or pass mask directly. Let's assume mask is 255.255.255.0 -> /24
-    #    # echo "static ip_address=${CONFIG[WIFI_AP_IP]}/24" >> /etc/dhcpcd.conf # Simplification
-    #    # echo "nohook wpa_supplicant" >> /etc/dhcpcd.conf # Important for AP mode
-    #    # systemctl restart dhcpcd
-    #    # log_message "INFO" "Attempted to add static IP to /etc/dhcpcd.conf. Restarting dhcpcd."
-    #    # sleep 5
-    #    # if ! ip addr show "${CONFIG[WIFI_AP_INTERFACE]}" | grep -q "inet ${CONFIG[WIFI_AP_IP]}"; then
-    #    #     log_message "ERROR" "Failed to assign static IP ${CONFIG[WIFI_AP_IP]} to ${CONFIG[WIFI_AP_INTERFACE]}."
-    #    #     exit 1
-    #    # fi
-    # else
-    #      log_message "INFO" "Verified IP ${CONFIG[WIFI_AP_IP]} on interface ${CONFIG[WIFI_AP_INTERFACE]}."
-    # fi
+    log_message "INFO" "AP_STA_RPI_SAME_WIFI_CHIP script finished execution."
 
-    # --- Configure hostapd (AP Service) ---
-    log_message "INFO" "Configuring hostapd..."
-    process_template "$TEMPLATE_DIR/hostapd.conf.j2" "/etc/hostapd/hostapd.conf"
-    # Ensure country code is set in the template!
-    if ! grep -q "country_code=" /etc/hostapd/hostapd.conf; then
-         log_message "WARNING" "country_code not set in /etc/hostapd/hostapd.conf template. WiFi stability/legality may be affected."
+    # --- Verification Step ---
+    log_message "INFO" "Verifying network interface configuration after script execution..."
+    sleep 3 # Short delay to allow network changes to apply
+    local verify_attempts=4
+    local verify_success=false
+    for ((i=1; i<=verify_attempts; i++)); do
+        log_message "INFO" "Verification attempt $i/$verify_attempts for IP ${CONFIG[WIFI_AP_IP]} on ${CONFIG[WIFI_AP_INTERFACE]}..."
+        # Check if interface exists and has the IP assigned
+        if ip addr show "${CONFIG[WIFI_AP_INTERFACE]}" &> /dev/null && ip addr show "${CONFIG[WIFI_AP_INTERFACE]}" | grep -q "inet ${CONFIG[WIFI_AP_IP]}/"; then
+            log_message "INFO" "Successfully verified IP ${CONFIG[WIFI_AP_IP]} on interface ${CONFIG[WIFI_AP_INTERFACE]}."
+            verify_success=true
+            break
+        else
+            log_message "WARNING" "Attempt $i: Interface ${CONFIG[WIFI_AP_INTERFACE]} or IP ${CONFIG[WIFI_AP_IP]} not found/assigned yet."
+            if [[ $i -lt $verify_attempts ]]; then
+                log_message "INFO" "Retrying verification in 5 seconds..."
+                sleep 5 # Wait longer before retrying
+            fi
+        fi
+    done
+
+    if ! $verify_success; then
+        log_message "ERROR" "Failed to verify static IP ${CONFIG[WIFI_AP_IP]} on ${CONFIG[WIFI_AP_INTERFACE]} after $verify_attempts attempts."
+        log_message "ERROR" "The AP_STA setup script may have failed, or there is a network configuration issue."
+        log_message "ERROR" "Check /etc/dhcpcd.conf, /etc/network/interfaces.d/, and journalctl for related services."
+        exit 1 # Exit because subsequent network services depend on this IP
     fi
-    # Point hostapd daemon to the config file
-    sed -i 's|#DAEMON_CONF=""|DAEMON_CONF="/etc/hostapd/hostapd.conf"|' /etc/default/hostapd
-    # Set permissions
+    # --- End Verification Step ---
+
+
+    # --- Configure hostapd (Access Point Service) ---
+    log_message "INFO" "Configuring hostapd (AP Daemon)..."
+    # Ensure the template exists
+    if [[ ! -f "$TEMPLATE_DIR/hostapd.conf.j2" ]]; then
+         log_message "ERROR" "hostapd template not found at $TEMPLATE_DIR/hostapd.conf.j2"
+         exit 1
+    fi
+    # Process the template using config values
+    process_template "$TEMPLATE_DIR/hostapd.conf.j2" "/etc/hostapd/hostapd.conf"
+    # Verify placeholder substitution in the template (especially country code)
+    if ! grep -q "country_code=${CONFIG[WIFI_COUNTRY_CODE]}" /etc/hostapd/hostapd.conf; then
+         log_message "WARNING" "Country code in generated /etc/hostapd/hostapd.conf does not match config value '${CONFIG[WIFI_COUNTRY_CODE]}'. Check template processing."
+         # Force setting it if template processing failed? Could overwrite other things... best to fix template/processing.
+    fi
+    # Point hostapd daemon default config to our file
+    if [[ -f /etc/default/hostapd ]]; then
+         # Backup existing config only if changing it
+         if ! grep -q 'DAEMON_CONF="/etc/hostapd/hostapd.conf"' /etc/default/hostapd; then
+              cp /etc/default/hostapd /etc/default/hostapd.bak.$(date +%F_%T)
+              sed -i 's|^#DAEMON_CONF=.*|DAEMON_CONF="/etc/hostapd/hostapd.conf"|' /etc/default/hostapd
+              log_message "INFO" "Updated /etc/default/hostapd to use generated config file."
+         fi
+    else
+         log_message "WARNING" "/etc/default/hostapd not found. hostapd might require different configuration method."
+    fi
+    # Set secure permissions for the config file containing the password
     chmod 600 /etc/hostapd/hostapd.conf
 
-    # --- Configure dnsmasq (DHCP/DNS for AP) ---
-    log_message "INFO" "Configuring dnsmasq..."
-    # Use a dedicated config file in /etc/dnsmasq.d/ for cleaner management
+
+    # --- Configure dnsmasq (DHCP/DNS for AP Clients) ---
+    log_message "INFO" "Configuring dnsmasq (DHCP/DNS Server)..."
+    if [[ ! -f "$TEMPLATE_DIR/dnsmasq.conf.j2" ]]; then
+         log_message "ERROR" "dnsmasq template not found at $TEMPLATE_DIR/dnsmasq.conf.j2"
+         exit 1
+    fi
+    # Create a dedicated config file in /etc/dnsmasq.d/ for cleaner management
     mkdir -p /etc/dnsmasq.d/
     process_template "$TEMPLATE_DIR/dnsmasq.conf.j2" "/etc/dnsmasq.d/01-syhub-ap.conf"
     chmod 644 /etc/dnsmasq.d/01-syhub-ap.conf
 
-    # --- Configure Avahi (mDNS/Bonjour) ---
-    log_message "INFO" "Configuring Avahi for mDNS hostname resolution..."
+
+    # --- Configure Avahi (mDNS/Bonjour for Hostname Discovery) ---
+    log_message "INFO" "Configuring Avahi (mDNS/Bonjour Service)..."
+     if [[ ! -f "$TEMPLATE_DIR/syhub-avahi.service.j2" ]]; then
+         log_message "ERROR" "Avahi template not found at $TEMPLATE_DIR/syhub-avahi.service.j2"
+         exit 1
+    fi
     process_template "$TEMPLATE_DIR/syhub-avahi.service.j2" "/etc/avahi/services/syhub.service"
     chmod 644 /etc/avahi/services/syhub.service
 
+
     # --- Enable and Restart Network Services ---
     log_message "INFO" "Enabling and restarting network services..."
-    # Unblock WiFi in case it's blocked
-    rfkill unblock wifi || log_message "WARNING" "rfkill unblock wifi failed (might be okay)."
+    # Unblock WiFi in case it's blocked by rfkill
+    if command -v rfkill &> /dev/null; then
+         log_message "INFO" "Unblocking WiFi via rfkill..."
+         rfkill unblock wifi || log_message "WARNING" "rfkill unblock wifi command failed (this might be okay if not blocked)."
+    fi
 
-    systemctl unmask hostapd # Often masked by default
-    systemctl enable hostapd dnsmasq avahi-daemon
+    # Services required for AP+STA mode according to the script and our setup
+    local network_services=(
+        # dhcpcd is usually enabled by default, restarting is important after IP changes
+        hostapd
+        dnsmasq
+        avahi-daemon
+    )
 
-    # Restart services in appropriate order
-    systemctl restart dhcpcd # Apply potential IP changes from AP_STA script / manual config
-    sleep 2 # Allow dhcpcd to settle
+    # Unmask services if they were masked (e.g., hostapd)
+    for service in "${network_services[@]}"; do
+        if systemctl is-masked --quiet "$service"; then
+            log_message "INFO" "Unmasking service: $service"
+            systemctl unmask "$service"
+        fi
+        log_message "INFO" "Enabling service: $service"
+        systemctl enable "$service"
+    done
+
+    # Restart services in an order that makes sense
+    # dhcpcd first to ensure interfaces are up with correct IPs
+    log_message "INFO" "Restarting dhcpcd service..."
+    systemctl restart dhcpcd
+    sleep 2 # Allow dhcpcd to settle and interfaces to get configured
+
+    # Restart hostapd (needs interface to be up with static IP)
+    log_message "INFO" "Restarting hostapd service..."
     systemctl restart hostapd
+
+    # Restart dnsmasq (needs interface to be up with static IP for binding)
+    log_message "INFO" "Restarting dnsmasq service..."
     systemctl restart dnsmasq
+
+    # Restart Avahi (can run anytime but good to restart after hostname/network changes)
+    log_message "INFO" "Restarting avahi-daemon service..."
     systemctl restart avahi-daemon
 
-    log_message "INFO" "Network setup finished. AP SSID: ${CONFIG[WIFI_AP_SSID]}, STA SSID: ${CONFIG[WIFI_STA_SSID]}, Hostname: ${CONFIG[HOSTNAME]}"
-    log_message "INFO" "Connect to AP or access via STA network at http://${CONFIG[HOSTNAME]}:${CONFIG[DASHBOARD_PORT]}"
+    # Final check on service status
+    log_message "INFO" "Verifying service statuses..."
+    for service in "${network_services[@]}"; do
+         if systemctl is-active --quiet "$service"; then
+             log_message "INFO" "Service '$service' is active."
+         else
+             log_message "WARNING" "Service '$service' is NOT active after restart. Check logs: journalctl -u $service"
+             # Optionally add 'journalctl -n 20 -u $service --no-pager' here to show recent logs directly
+         fi
+    done
+
+
+    log_message "INFO" "--- Network Setup Finished ---"
+    log_message "INFO" "AP SSID: ${CONFIG[WIFI_AP_SSID]} should be visible."
+    log_message "INFO" "STA Connection: Check router or run 'iwconfig wlan0'."
+    log_message "INFO" "Hostname: ${CONFIG[HOSTNAME]} should be resolving on the network."
+    log_message "INFO" "Access dashboard (once set up) at http://${CONFIG[HOSTNAME]}:${CONFIG[DASHBOARD_PORT]}"
 }
 
 setup_mqtt() {
