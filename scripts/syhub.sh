@@ -203,7 +203,7 @@ install_packages() {
 setup_dependencies() {
     log_message "INFO" "Installing core dependencies..."
     # yq: For YAML parsing. Using binary download for consistency. Find latest at https://github.com/mikefarah/yq/releases
-    YQ_VERSION="v4.44.1" # Specify desired version
+    YQ_VERSION="v4.45.1" # Specify desired version
     YQ_BINARY="yq_linux_arm64"
     if ! command -v yq &> /dev/null || [[ "$(yq --version)" != *"$YQ_VERSION"* ]]; then
         log_message "INFO" "Installing yq ${YQ_VERSION}..."
