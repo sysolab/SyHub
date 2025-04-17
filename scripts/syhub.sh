@@ -205,7 +205,7 @@ install_packages() {
 setup_dependencies() {
     log_message "INFO" "Installing core dependencies..."
     # yq: For YAML parsing. Using binary download for consistency. Find latest at https://github.com/mikefarah/yq/releases
-    YQ_VERSION="v4.44.1" # Specify desired version
+    YQ_VERSION="v4.45.1" # Specify desired version
     YQ_BINARY="yq_linux_arm64"
     if ! command -v yq &> /dev/null || [[ "$(yq --version)" != *"$YQ_VERSION"* ]]; then
         log_message "INFO" "Installing yq ${YQ_VERSION}..."
@@ -345,7 +345,7 @@ setup_network() {
     # It typically modifies /etc/dhcpcd.conf, /etc/network/interfaces.d/,
     # sets up wpa_supplicant for STA, and might install additional helpers.
     local ap_sta_script_dir="/opt/AP_STA_RPI_SAME_WIFI_CHIP"
-    local ap_sta_repo="https://github.com/NicholasAdamou/AP_STA_RPI_SAME_WIFI_CHIP.git"
+    local ap_sta_repo="https://github.com/MkLHX/AP_STA_RPI_SAME_WIFI_CHIP.git"
 
     if [[ ! -d "$ap_sta_script_dir" ]]; then
         log_message "INFO" "Cloning AP_STA_RPI_SAME_WIFI_CHIP script from $ap_sta_repo..."
