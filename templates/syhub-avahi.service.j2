@@ -6,44 +6,74 @@
   <?xml version="1.0" standalone='no'?><!--*-nxml-*-->
   <!DOCTYPE service-group SYSTEM "avahi-service.dtd">
   <service-group>
-    <name replace-wildcards="yes">%h __PROJECT_NAME__</name> <!-- Advertise hostname and project name -->
+    <!-- Service Group Name - uses the device's hostname and the project name -->
+    <!-- replace-wildcards="yes" replaces %h with the current hostname -->
+    <name replace-wildcards="yes">%h __PROJECT_NAME__</name>
+  
+    <!-- Optional: Basic device information -->
     <service>
-      <type>_device-info._tcp</type> <!-- Optional: Advertise device type -->
-      <port>0</port>
-      <txt-record>model=Raspberry Pi</txt-record>
+      <type>_device-info._tcp</type> <!-- Standard type for device info -->
+      <port>0</port> <!-- Port is not relevant for device info -->
+      <txt-record>model=RaspberryPi_syHub</txt-record> <!-- Example: Make model more specific -->
+      <txt-record>vendor=syHubProject</txt-record>     <!-- Example: Your brand/project -->
     </service>
   
-    <!-- Web Dashboard -->
+    <!-- Web Dashboard (_http._tcp on configured dashboard port) -->
     <service>
       <type>_http._tcp</type>
       <port>__DASHBOARD_PORT__</port>
-      <txt-record>app=syHubDashboard</txt-record>
-      <txt-record>project=__PROJECT_NAME__</txt-record>
-      <interface>ap0</interface> <!-- Explicitly advertise on the AP interface -->
-      <interface>wlan0</interface> <!-- Also advertise on the STA interface if active -->
-      <interface>eth0</interface>  <!-- Also advertise on Ethernet if active -->
+      <txt-record>path=/</txt-record>                   <!-- Standard path for web service -->
+      <txt-record>app=syHubDashboard</txt-record>      <!-- Application identifier -->
+      <txt-record>project=__PROJECT_NAME__</txt-record> <!-- Project name -->
+      <!-- Advertise on relevant interfaces -->
+      <!-- Avahi will automatically resolve %h to the IP on each interface -->
+      <interface>ap0</interface>     <!-- Advertise on the AP Interface -->
+      <interface>wlan0</interface>   <!-- Advertise on the STA Interface -->
+      <interface>eth0</interface>    <!-- Advertise on Ethernet Interface (if active) -->
     </service>
   
-    <!-- Node-RED UI -->
+    <!-- Node-RED UI (_node-red._tcp on configured Node-RED port) -->
     <service>
-      <type>_node-red._tcp</type> <!-- Standard type for Node-RED -->
+      <type>_node-red._tcp</type> <!-- Standard service type for Node-RED -->
       <port>__NODERED_PORT__</port>
-      <txt-record>app=syHubNodeRED</txt-record>
-      <txt-record>path=/</txt-record>
-       <interface>ap0</interface>
-       <interface>wlan0</interface>
-       <interface>eth0</interface>
+      <txt-record>path=/</txt-record>                   <!-- Default Node-RED UI path -->
+      <txt-record>app=syHubNodeRED</txt-record>         <!-- Application identifier -->
+      <txt-record>project=__PROJECT_NAME__</txt-record> <!-- Project name -->
+      <!-- Advertise on relevant interfaces -->
+      <interface>ap0</interface>
+      <interface>wlan0</interface>
+      <interface>eth0</interface>
     </service>
   
-    <!-- MQTT Broker -->
+    <!-- MQTT Broker (_mqtt._tcp on configured MQTT port) -->
     <service>
-      <type>_mqtt._tcp</type>
+      <type>_mqtt._tcp</type>      <!-- Standard service type for MQTT -->
       <port>__MQTT_PORT__</port>
-      <txt-record>app=syHubMQTT</txt-record>
-      <txt-record>secure=false</txt-record>
-       <interface>ap0</interface>
-       <interface>wlan0</interface>
-       <interface>eth0</interface>
+      <txt-record>app=syHubMQTT</txt-record>            <!-- Application identifier -->
+      <txt-record>version=1.0</txt-record>              <!-- Example: Add application version -->
+      <txt-record>secure=false</txt-record>             <!-- Set to true if/when TLS is implemented -->
+      <txt-record>project=__PROJECT_NAME__</txt-record> <!-- Project name -->
+      <!-- Advertise on relevant interfaces -->
+      <interface>ap0</interface>
+      <interface>wlan0</interface>
+      <interface>eth0</interface>
     </service>
+  
+    <!-- Optional: VictoriaMetrics HTTP API (_http._tcp on configured VM port) -->
+    <!-- Usually not advertised for direct user access, but possible. -->
+    <!-- Uncomment the block below if direct VM API discovery is desired -->
+    <!--
+    <service>
+      <type>_http._tcp</type>
+      <subtype>_victoriametrics._tcp</subtype> -- Optional: Allows filtering for VM instances
+      <port>__VICTORIA_METRICS_PORT__</port>
+      <txt-record>path=/</txt-record>            -- Assuming root path for VM API
+      <txt-record>app=syHubVictoriaMetrics</txt-record>
+      <txt-record>project=__PROJECT_NAME__</txt-record>
+      <interface>ap0</interface>
+      <interface>wlan0</interface>
+      <interface>eth0</interface>
+    </service>
+    -->
   
   </service-group>
