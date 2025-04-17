@@ -1,4 +1,3 @@
-```bash
 #!/bin/bash
 
 # syhub.sh: Setup script for IoT monitoring system on Raspberry Pi
@@ -468,4 +467,3 @@ case "$1" in
 esac
 
 echo "Script completed at $(date)"
-```
