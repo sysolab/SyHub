@@ -16,7 +16,7 @@
 # SYHUB_STA_ONLY        # "true" or "false"
 # SYHUB_NO_INTERNET     # "true" or "false"
 # SYHUB_BASE_DIR        # /home/<user>/syhub
-# SYHUB_LOG_DIR         # /var/log/syhub (or similar, where we want cron logs)
+# SYHUB_HOSTNAME        # e.g., plantomio.local
 
 # --- Safety ---
 set -o errexit   # Exit immediately if a command exits with a non-zero status.
@@ -25,37 +25,44 @@ set -o nounset   # Treat unset variables as an error when substituting.
 
 # No color codes in logger for script execution logs
 _logger() {
-    echo "[ap_sta_config.sh] ${1}"
+    echo "[ap_sta_config.sh] $(date +%Y%m%d-%T) ${1}" # Added timestamp
 }
 
 # --- Validate Required Environment Variables ---
-if [[ -z "${SYHUB_AP_SSID:-}" || -z "${SYHUB_CLIENT_SSID:-}" || -z "${SYHUB_COUNTRY_CODE:-}" ]]; then
-    # Check flags for ap-only/sta-only scenarios
+# Validation is simplified as syhub.sh should guarantee these if network setup is requested
+if [[ -z "${SYHUB_AP_SSID:-}" || -z "${SYHUB_CLIENT_SSID:-}" || -z "${SYHUB_COUNTRY_CODE:-}" || -z "${SYHUB_AP_IP:-}" ]]; then
+    # Check flags for ap-only/sta-only scenarios if needed
     if [[ ("${SYHUB_AP_ONLY:-"false"}" != "true" || -z "${SYHUB_AP_SSID:-}") && \
           ("${SYHUB_STA_ONLY:-"false"}" != "true" || -z "${SYHUB_CLIENT_SSID:-}" || -z "${SYHUB_COUNTRY_CODE:-}") ]]; then
         _logger "ERROR: Missing required environment variables for configuration."
-        _logger "Ensure SYHUB_AP_SSID, SYHUB_CLIENT_SSID, SYHUB_COUNTRY_CODE are set (or SYHUB_AP_ONLY/SYHUB_STA_ONLY flags are used with respective variables)."
+        _logger "Ensure SYHUB_AP_SSID, SYHUB_CLIENT_SSID, SYHUB_COUNTRY_CODE, SYHUB_AP_IP are set."
         exit 1
     fi
 fi
 
 # --- Set Variables from Environment ---
-AP_SSID="${SYHUB_AP_SSID:-}"
-AP_PASSPHRASE="${SYHUB_AP_PASSWORD:-}"
-CLIENT_SSID="${SYHUB_CLIENT_SSID:-}"
-CLIENT_PASSPHRASE="${SYHUB_CLIENT_PASSWORD:-}"
-COUNTRY_CODE="${SYHUB_COUNTRY_CODE:-'FR'}" # Default if not provided (should be provided by syhub.sh)
-AP_IP="${SYHUB_AP_IP:-'192.168.50.1'}"   # Default if not provided (should be provided)
-WIFI_MODE="${SYHUB_WIFI_MODE:-'g'}"       # Default 'g'
+AP_SSID="${SYHUB_AP_SSID}"
+AP_PASSPHRASE="${SYHUB_AP_PASSWORD:-}" # Allow empty password if not set in config
+CLIENT_SSID="${SYHUB_CLIENT_SSID}"
+CLIENT_PASSPHRASE="${SYHUB_CLIENT_PASSWORD:-}" # Allow empty password if not set in config
+COUNTRY_CODE="${SYHUB_COUNTRY_CODE}"
+AP_IP="${SYHUB_AP_IP}"
+WIFI_MODE="${SYHUB_WIFI_MODE:-'g'}"       # Default 'g' if not set
 AP_ONLY="${SYHUB_AP_ONLY:-"false"}"
 STA_ONLY="${SYHUB_STA_ONLY:-"false"}"
 NO_INTERNET="${SYHUB_NO_INTERNET:-"false"}" # Controls IP forwarding/NAT
+SYHUB_HOSTNAME="${SYHUB_HOSTNAME:-syhub.local}" # Fallback hostname
 
 # Derive AP_IP_BEGIN for dnsmasq range (assumes /24 mask)
 AP_IP_BEGIN=$(echo "${AP_IP}" | sed -e 's/\.[0-9]\{1,3\}$//g')
 
 # Get MAC address of wlan0
-MAC_ADDRESS="$(cat /sys/class/net/wlan0/address)" || { _logger "ERROR: Could not get MAC address for wlan0."; exit 1; }
+if [[ -e /sys/class/net/wlan0/address ]]; then
+    MAC_ADDRESS="$(cat /sys/class/net/wlan0/address)"
+else
+     _logger "ERROR: Could not get MAC address for wlan0. Interface might not exist or be up."
+     exit 1
+fi
 
 
 _logger "Configuring AP+STA using parameters:"
@@ -71,64 +78,59 @@ if [ $(id -u) != 0 ]; then
     _logger "ERROR: This script must be run as root."
     exit 1
 fi
-# Dependency checks are handled by the main syhub.sh script now.
 
 # --- Populate Configuration Files ---
 
 # Populate `/etc/udev/rules.d/70-persistent-net.rules` (Needed for ap0 virtual interface)
-# This needs to be done only if not in STA_ONLY mode
 if [[ "${STA_ONLY}" != "true" ]]; then
     _logger "Populate /etc/udev/rules.d/70-persistent-net.rules"
-    bash -c 'cat > /etc/udev/rules.d/70-persistent-net.rules' <<EOF
-SUBSYSTEM=="ieee80211", ACTION=="add|change", ATTR{macaddress}=="${MAC_ADDRESS}", KERNEL=="phy0", \
-RUN+="/sbin/iw phy phy0 interface add ap0 type __ap", \
-RUN+="/bin/ip link set ap0 address ${MAC_ADDRESS}
-
+    # Check if file exists and differs before overwriting
+    RULES_CONTENT=$(cat <<EOF
+SUBSYSTEM=="ieee80211", ACTION=="add|change", ATTR{macaddress}=="${MAC_ADDRESS}", KERNEL=="phy0", \\
+RUN+="/sbin/iw phy phy0 interface add ap0 type __ap", \\
+RUN+="/bin/ip link set ap0 address ${MAC_ADDRESS}"
 EOF
-    # Trigger udev rules reload? Not strictly necessary on reboot, but can help if running live.
-    # udevadm control --reload-rules && udevadm trigger
+)
+    if [[ ! -f /etc/udev/rules.d/70-persistent-net.rules ]] || ! cmp -s <(echo "$RULES_CONTENT") /etc/udev/rules.d/70-persistent-net.rules; then
+        echo "$RULES_CONTENT" > /etc/udev/rules.d/70-persistent-net.rules
+        _logger "Updated /etc/udev/rules.d/70-persistent-net.rules"
+        # Trigger udev rules reload? Could cause temporary network disruption.
+        # udevadm control --reload-rules && udevadm trigger
+    else
+        _logger "/etc/udev/rules.d/70-persistent-net.rules is up-to-date."
+    fi
 fi
 
 # Populate `/etc/dnsmasq.d/01-syhub-ap.conf` (DHCP/DNS for AP)
-# Modify to write to /etc/dnsmasq.d/ instead of /etc/dnsmasq.conf
-# This needs to be done only if not in STA_ONLY mode
 if [[ "${STA_ONLY}" != "true" ]]; then
     _logger "Populate /etc/dnsmasq.d/01-syhub-ap.conf"
-    bash -c 'cat > /etc/dnsmasq.d/01-syhub-ap.conf' <<EOF
+    DNSMASQ_CONTENT=$(cat <<EOF
 # syHub AP DHCP/DNS configuration
 # Generated by ap_sta_config.sh
-interface=ap0           # Listen only on the AP interface
-#interface=lo,ap0       # Original script included lo, might be needed? Let's stick to ap0 first.
-no-dhcp-interface=wlan0 # Do not provide DHCP on the STA interface
-#bind-interfaces         # Removed, might cause issues if interface isn't up immediately
-
-# DNS settings
-server=8.8.8.8          # Forward DNS requests to Google DNS (or use local cache?)
-# no-resolv             # Uncomment to NOT forward DNS, only use local addresses below
-# address=/#/${AP_IP}   # Uncomment and use with no-resolv to resolve *any* domain to AP IP
-
-domain=${SYHUB_HOSTNAME:-plantomio.local} # Use hostname from syHub config
-
-# DHCP range and lease time for AP clients
+interface=ap0
+no-dhcp-interface=wlan0
+server=8.8.8.8          # Default upstream DNS
+domain=${SYHUB_HOSTNAME}
 dhcp-range=${AP_IP_BEGIN}.50,${AP_IP_BEGIN}.150,12h
-
-# DHCP options for clients
-dhcp-option=option:router,${AP_IP}         # Set gateway to AP IP
-dhcp-option=option:dns-server,${AP_IP}     # Set DNS server to AP IP
-
-# Log queries and DHCP (optional)
-# log-queries
-# log-dhcp
-
+dhcp-option=option:router,${AP_IP}
+dhcp-option=option:dns-server,${AP_IP}
+# log-queries # Uncomment for debugging
+# log-dhcp    # Uncomment for debugging
 EOF
-    chmod 644 /etc/dnsmasq.d/01-syhub-ap.conf
+)
+    if [[ ! -f /etc/dnsmasq.d/01-syhub-ap.conf ]] || ! cmp -s <(echo "$DNSMASQ_CONTENT") /etc/dnsmasq.d/01-syhub-ap.conf; then
+        echo "$DNSMASQ_CONTENT" > /etc/dnsmasq.d/01-syhub-ap.conf
+        chmod 644 /etc/dnsmasq.d/01-syhub-ap.conf
+        _logger "Updated /etc/dnsmasq.d/01-syhub-ap.conf"
+    else
+         _logger "/etc/dnsmasq.d/01-syhub-ap.conf is up-to-date."
+    fi
 fi
 
 # Populate `/etc/hostapd/hostapd.conf` (AP Configuration)
-# This needs to be done only if not in STA_ONLY mode
 if [[ "${STA_ONLY}" != "true" ]]; then
     _logger "Populate /etc/hostapd/hostapd.conf"
-    bash -c 'cat > /etc/hostapd/hostapd.conf' <<EOF
+    HOSTAPD_CONTENT=$(cat <<EOF
 # syHub Hostapd configuration
 # Generated by ap_sta_config.sh
 ctrl_interface=/var/run/hostapd
@@ -137,203 +139,181 @@ interface=ap0
 driver=nl80211
 ssid=${AP_SSID}
 hw_mode=${WIFI_MODE}
-channel=11 # Static channel
-country_code=${COUNTRY_CODE} # Use country code from config
-ieee80211n=1 # Enable 11n if hw_mode allows
-wmm_enabled=1 # Enable WMM (required for 11n)
-#ht_capab=[HT40+][SHORT-GI-20][DSSS_CCK-40] # Optional 11n capabilities
-
+channel=11
+country_code=${COUNTRY_CODE}
+ieee80211n=1
+wmm_enabled=1
 macaddr_acl=0
 auth_algs=1
 ignore_broadcast_ssid=0
 wpa=2
-$([ -n "${AP_PASSPHRASE}" ] && echo "wpa_passphrase=${AP_PASSPHRASE}") # Include passphrase only if provided
+$([ -n "${AP_PASSPHRASE}" ] && echo "wpa_passphrase=${AP_PASSPHRASE}")
 wpa_key_mgmt=WPA-PSK
-rsn_pairwise=CCMP # WPA2 requires CCMP
-# wpa_pairwise=TKIP CCMP # TKIP is deprecated, RSN/CCMP is preferred
-
+rsn_pairwise=CCMP
 EOF
-    chmod 600 /etc/hostapd/hostapd.conf
+)
+    if [[ ! -f /etc/hostapd/hostapd.conf ]] || ! cmp -s <(echo "$HOSTAPD_CONTENT") /etc/hostapd/hostapd.conf; then
+        echo "$HOSTAPD_CONTENT" > /etc/hostapd/hostapd.conf
+        chmod 600 /etc/hostapd/hostapd.conf
+        _logger "Updated /etc/hostapd/hostapd.conf"
+    else
+        _logger "/etc/hostapd/hostapd.conf is up-to-date."
+    fi
 fi
 
 # Populate `/etc/default/hostapd` (Daemon defaults)
-# This needs to be done only if not in STA_ONLY mode
 if [[ "${STA_ONLY}" != "true" ]]; then
     _logger "Populate /etc/default/hostapd"
-    bash -c 'cat > /etc/default/hostapd' <<EOF
+    HOSTAPD_DEFAULT_CONTENT=$(cat <<EOF
 # syHub Hostapd defaults
 # Generated by ap_sta_config.sh
 DAEMON_CONF="/etc/hostapd/hostapd.conf"
-
 EOF
+)
+    if [[ ! -f /etc/default/hostapd ]] || ! cmp -s <(echo "$HOSTAPD_DEFAULT_CONTENT") /etc/default/hostapd; then
+        echo "$HOSTAPD_DEFAULT_CONTENT" > /etc/default/hostapd
+        _logger "Updated /etc/default/hostapd"
+    else
+         _logger "/etc/default/hostapd is up-to-date."
+    fi
 fi
 
 # Populate `/etc/wpa_supplicant/wpa_supplicant.conf` (STA Configuration)
-# This needs to be done only if not in AP_ONLY mode
 if [[ "${AP_ONLY}" != "true" ]]; then
     _logger "Populate /etc/wpa_supplicant/wpa_supplicant.conf"
-    bash -c 'cat > /etc/wpa_supplicant/wpa_supplicant.conf' <<EOF
+    WPA_CONTENT=$(cat <<EOF
 # syHub WPA Supplicant configuration (STA Mode)
 # Generated by ap_sta_config.sh
 ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
 update_config=1
-country=${COUNTRY_CODE} # Use country code from config
+country=${COUNTRY_CODE}
 network={
     ssid="${CLIENT_SSID}"
-    $([ -n "${CLIENT_PASSPHRASE}" ] && echo "psk=\"${CLIENT_PASSPHRASE}\"") # Include passphrase only if provided
-    id_str="STA1" # Renamed from AP1 to STA1 for clarity
+    $([ -n "${CLIENT_PASSPHRASE}" ] && echo "psk=\"${CLIENT_PASSPHRASE}\"")
+    id_str="STA1"
     scan_ssid=1
-    # Other options like priority, key_mgmt might be needed depending on network
-    # key_mgmt=WPA-PSK
-    # priority=10
 }
-
 EOF
-    chown root:root /etc/wpa_supplicant/wpa_supplicant.conf # Ensure root ownership
-    chmod 600 /etc/wpa_supplicant/wpa_supplicant.conf      # Secure permissions
+)
+    if [[ ! -f /etc/wpa_supplicant/wpa_supplicant.conf ]] || ! cmp -s <(echo "$WPA_CONTENT") /etc/wpa_supplicant/wpa_supplicant.conf; then
+        echo "$WPA_CONTENT" > /etc/wpa_supplicant/wpa_supplicant.conf
+        chown root:root /etc/wpa_supplicant/wpa_supplicant.conf
+        chmod 600 /etc/wpa_supplicant/wpa_supplicant.conf
+        _logger "Updated /etc/wpa_supplicant/wpa_supplicant.conf"
+    else
+         _logger "/etc/wpa_supplicant/wpa_supplicant.conf is up-to-date."
+    fi
 fi
 
 # Populate `/etc/network/interfaces` (Defining Interfaces)
-# WARNING: This modifies a file that is often managed by dhcpcd on modern Pi OS.
-# This might cause conflicts. Proceed with caution.
 _logger "Populate /etc/network/interfaces (WARNING: This might conflict with dhcpcd)"
-bash -c 'cat > /etc/network/interfaces' <<EOF
+INTERFACES_CONTENT=$(cat <<EOF
 # syHub network interfaces
 # Generated by ap_sta_config.sh
 # WARNING: This file is managed by syHub and may conflict with default OS network services like dhcpcd.
-# If network issues occur, consider disabling dhcpcd or removing this file and using a dhcpcd-compatible AP+STA setup.
 
 source-directory /etc/network/interfaces.d
 
 auto lo
-# auto ap0 # AP interface is often brought up by hostapd/udev/rpi-wifi.sh
-auto wlan0 # STA interface needs 'auto' or 'allow-hotplug'
+auto wlan0
 
 iface lo inet loopback
 
 # Configuration for the Access Point interface (ap0)
-allow-hotplug ap0 # Allow hotplug for the virtual AP interface
+allow-hotplug ap0
 iface ap0 inet static
     address ${AP_IP}
     netmask 255.255.255.0
-    # network ${AP_IP_BEGIN}.0 # Not strictly necessary
-    # broadcast ${AP_IP_BEGIN}.255 # Not strictly necessary
-    # gateway ${AP_IP} # Clients use AP as gateway, defining it here for ap0 itself is less common
-    # hostapd /etc/hostapd/hostapd.conf # hostapd daemon reads this config
 
 # Configuration for the Station interface (wlan0)
-allow-hotplug wlan0 # Allow hotplug for the physical interface
-iface wlan0 inet manual # Manual control, wpa_supplicant manages connection
-    wpa-roam /etc/wpa_supplicant/wpa_supplicant.conf # WPA supplicant config file
-iface STA1 inet dhcp # Connect using DHCP once wpa_supplicant connects to the network defined by id_str="STA1"
-
+allow-hotplug wlan0
+iface wlan0 inet manual
+    wpa-roam /etc/wpa_supplicant/wpa_supplicant.conf
+iface STA1 inet dhcp
 EOF
-# Set permissions for /etc/network/interfaces
-chown root:root /etc/network/interfaces
-chmod 644 /etc/network/interfaces
+)
+ if [[ ! -f /etc/network/interfaces ]] || ! cmp -s <(echo "$INTERFACES_CONTENT") /etc/network/interfaces; then
+    echo "$INTERFACES_CONTENT" > /etc/network/interfaces
+    chown root:root /etc/network/interfaces
+    chmod 644 /etc/network/interfaces
+    _logger "Updated /etc/network/interfaces"
+else
+    _logger "/etc/network/interfaces is up-to-date."
+fi
 
 
 # Populate `/bin/manage-ap0-iface.sh` (Hostapd helper script)
-# This needs to be done only if not in STA_ONLY mode
 if [[ "${STA_ONLY}" != "true" ]]; then
     _logger "Populate /bin/manage-ap0-iface.sh"
-    bash -c 'cat > /bin/manage-ap0-iface.sh' <<EOF
+    MANAGE_AP0_SCRIPT=$(cat <<'EOF' # Use 'EOF' to prevent variable expansion inside heredoc
 #!/bin/bash
 # syHub Hostapd AP0 Interface Management Script
 # Generated by ap_sta_config.sh
-# Check if hostapd service failed to start, potentially due to /var/run/hostapd/ap0 existence
-# If hostapd is not running, and the ap0 control interface file exists, remove it.
-
-# Set shell options for robustness
-set -o errexit   # Exit immediately if a command exits with a non-zero status.
-set -o pipefail  # Return value of a pipeline is the value of the last command to exit with a non-zero status.
-set -o nounset   # Treat unset variables as an error when substituting.
-
-# Log function for this script
-log_ap0_manage() {
-    echo "[ap0_manage.sh] \$(date +%Y%m%d-%T) \$1" # Log with timestamp
-}
-
+set -o errexit
+set -o pipefail
+set -o nounset
+log_ap0_manage() { echo "[ap0_manage.sh] $(date +%Y%m%d-%T) $1"; }
 log_ap0_manage "Checking hostapd service status..."
-# Check if hostapd is active (running)
 if systemctl is-active --quiet hostapd; then
     log_ap0_manage "hostapd service is active. No action needed."
 else
     log_ap0_manage "hostapd service is not active. Checking for /var/run/hostapd/ap0 file."
-    # Check if the control interface file exists
     if [[ -e /var/run/hostapd/ap0 ]]; then
         log_ap0_manage "/var/run/hostapd/ap0 exists. Attempting to remove it."
-        # Attempt to remove the file forcefully, ignore errors if it's already gone
         rm -f /var/run/hostapd/ap0
         if [[ -e /var/run/hostapd/ap0 ]]; then
              log_ap0_manage "WARNING: Failed to remove /var/run/hostapd/ap0."
         else
              log_ap0_manage "/var/run/hostapd/ap0 removed. Restarting hostapd service."
-             # Attempt to restart hostapd
              systemctl restart hostapd || log_ap0_manage "ERROR: Failed to restart hostapd after removing /var/run/hostapd/ap0."
         fi
     else
         log_ap0_manage "/var/run/hostapd/ap0 does not exist. Hostapd failure likely elsewhere."
     fi
 fi
-
 EOF
-    chmod +x /bin/manage-ap0-iface.sh
+)
+    if [[ ! -f /bin/manage-ap0-iface.sh ]] || ! cmp -s <(echo "$MANAGE_AP0_SCRIPT") /bin/manage-ap0-iface.sh; then
+        echo "$MANAGE_AP0_SCRIPT" > /bin/manage-ap0-iface.sh
+        chmod +x /bin/manage-ap0-iface.sh
+        _logger "Updated /bin/manage-ap0-iface.sh"
+    else
+        _logger "/bin/manage-ap0-iface.sh is up-to-date."
+    fi
 fi
 
 
 # Populate `/bin/rpi-wifi.sh` (Main WiFi Startup Script)
-# This needs to be done only if not in STA_ONLY mode
 if [[ "${STA_ONLY}" != "true" ]]; then
     _logger "Populate /bin/rpi-wifi.sh"
-    # Use the configured log directory from syHub config
-    local SYHUB_CRON_LOG_FILE_ON_BOOT="${SYHUB_LOG_DIR:-/var/log/syhub}/ap_sta_on_boot.log"
-
-    bash -c 'cat > /bin/rpi-wifi.sh' <<EOF
+    # Define script content with variable expansion for AP_IP_BEGIN
+    # Use 'EOF' for the outer heredoc, allow inner heredoc expansion
+    RPI_WIFI_SCRIPT=$(cat <<EOF
 #!/bin/bash
 # syHub WiFi Startup Script
 # Generated by ap_sta_config.sh
-# Attempts to bring up AP and STA interfaces
-
-# Set shell options for robustness
-set -o errexit   # Exit immediately if a command exits with a non-zero status.
-set -o pipefail  # Return value of a pipeline is the value of the last command to exit with a non-zero status.
-set -o nounset   # Treat unset variables as an error when substituting.
-
-# Log function for this script
-log_rpi_wifi() {
-    echo "[rpi_wifi.sh] \$(date +%Y%m%d-%T) \$1" # Log with timestamp
-}
-
+set -o errexit
+set -o pipefail
+set -o nounset
+log_rpi_wifi() { echo "[rpi_wifi.sh] \$(date +%Y%m%d-%T) \$1"; }
 log_rpi_wifi "Starting Wifi AP and STA client interfaces..."
-
-# Bring down interfaces forcefully before bringing them back up
 log_rpi_wifi "Bringing down wlan0 and ap0..."
 /usr/sbin/ifdown --force wlan0 || log_rpi_wifi "WARNING: ifdown wlan0 failed."
 /usr/sbin/ifdown --force ap0 || log_rpi_wifi "WARNING: ifdown ap0 failed."
-
-# Bring up interfaces
 log_rpi_wifi "Bringing up ap0..."
-/usr/sbin/ifup --force ap0 || { log_rpi_wifi "ERROR: Failed to bring up ap0."; exit 1; } # ap0 is critical for AP
-
+/usr/sbin/ifup --force ap0 || { log_rpi_wifi "ERROR: Failed to bring up ap0."; exit 1; }
 log_rpi_wifi "Bringing up wlan0..."
-/usr/sbin/ifup --force wlan0 || log_rpi_wifi "WARNING: Failed to bring up wlan0 (STA)." # STA failure might be okay depending on need
+/usr/sbin/ifup --force wlan0 || log_rpi_wifi "WARNING: Failed to bring up wlan0 (STA)."
 
 # --- Internet Sharing (NAT/IP Forwarding) ---
-$([ "${NO_INTERNET}" != "true" ] && cat <<IEOF
+$([ "${NO_INTERNET}" != "true" ] && cat <<IEOF # Use IEOF for inner heredoc
 log_rpi_wifi "Enabling IP forwarding and NAT..."
 /usr/sbin/sysctl -w net.ipv4.ip_forward=1 || log_rpi_wifi "WARNING: Failed to enable IP forwarding."
-# Ensure the NAT rule exists. Using -C to check first, then -A to append if not present.
-# Assuming default outbound interface is eth0 or wlan0 (STA interface)
-# Finding the default outbound interface dynamically is safer
 OUTBOUND_INTERFACE="\$(ip route get 8.8.8.8 | awk '{print \$5}' | head -n 1)"
 if [[ -z "\$OUTBOUND_INTERFACE" ]]; then
     log_rpi_wifi "WARNING: Could not determine default outbound interface for NAT rule."
 else
     log_rpi_wifi "Setting up NAT rule for outbound interface: \$OUTBOUND_INTERFACE"
-    # The rule is: POSTROUTING table (-t nat), Append rule (-A POSTROUTING),
-    # Source IP range (-s), Destination NOT the source range (! -d), Jump to MASQUERADE (-j MASQUERADE)
-    # Check if the rule already exists before adding
     if ! /usr/sbin/iptables -t nat -C POSTROUTING -s ${AP_IP_BEGIN}.0/24 ! -d ${AP_IP_BEGIN}.0/24 -o \$OUTBOUND_INTERFACE -j MASQUERADE 2>/dev/null; then
          log_rpi_wifi "Adding NAT rule..."
          /usr/sbin/iptables -t nat -A POSTROUTING -s ${AP_IP_BEGIN}.0/24 ! -d ${AP_IP_BEGIN}.0/24 -o \$OUTBOUND_INTERFACE -j MASQUERADE || log_rpi_wifi "ERROR: Failed to add NAT rule."
@@ -341,47 +321,26 @@ else
          log_rpi_wifi "NAT rule already exists."
     fi
 fi
-# Restart dnsmasq after interface changes and NAT setup
 log_rpi_wifi "Restarting dnsmasq service..."
 /usr/bin/systemctl restart dnsmasq || log_rpi_wifi "ERROR: Failed to restart dnsmasq."
 IEOF
 )
-
-# Reconfigure wpa_supplicant to pick up STA config changes
 log_rpi_wifi "Requesting wpa_supplicant reconfigure in 5sec..."
 /usr/bin/sleep 5
 /usr/sbin/wpa_cli -i wlan0 reconfigure || log_rpi_wifi "WARNING: wpa_cli reconfigure failed. STA connection might not work."
-
 log_rpi_wifi "Wifi startup script finished."
-
 EOF
-    chmod +x /bin/rpi-wifi.sh
+)
+    if [[ ! -f /bin/rpi-wifi.sh ]] || ! cmp -s <(echo "$RPI_WIFI_SCRIPT") /bin/rpi-wifi.sh; then
+        echo "$RPI_WIFI_SCRIPT" > /bin/rpi-wifi.sh
+        chmod +x /bin/rpi-wifi.sh
+        _logger "Updated /bin/rpi-wifi.sh"
+    else
+        _logger "/bin/rpi-wifi.sh is up-to-date."
+    fi
+
 fi
 
-# Unmask and enable dnsmasq.service / hostapd.service (only if not STA_ONLY)
-if [[ "${STA_ONLY}" != "true" ]]; then
-    _logger "Unmasking and enabling dnsmasq.service and hostapd.service"
-    # Note: The ap_sta_config.sh script itself does not manage systemd unit files.
-    # This step is included here based on the original script's presence,
-    # but our main syhub.sh script is responsible for *creating* the unit files
-    # and ensuring these services exist and are correctly configured *before* this script runs.
-    # This part might be redundant if syhub.sh handles service enabling.
-    # Let's keep it minimal here, assuming syhub.sh enables them.
-    # The main syhub.sh will handle starting/restarting the services.
-
-    # Original lines:
-    #/usr/bin/systemctl unmask dnsmasq.service hostapd.service
-    #/usr/bin/systemctl enable dnsmasq.service hostapd.service
-    #/usr/bin/systemctl daemon-reload
-
-    _logger "Service unmask/enable handled by main syhub.sh script."
-fi
-
-# Create log folder /var/log/ap_sta_wifi
-# This should be handled by the main syhub.sh script to ensure permissions
-
-# Finish Message (Removed verbose finish messages and reboot prompts)
-# Wait during wlan0 reconnecting to internet... (Removed, main script handles sync needs)
-# Call to ap_sta_cron.sh is removed, main script calls it separately
+# Service management (unmask/enable) is handled by syhub.sh
 
 _logger "ap_sta_config.sh finished."

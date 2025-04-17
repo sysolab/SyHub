@@ -13,6 +13,10 @@ hostname: plantomio.local     # mDNS hostname for accessing services (.local suf
 log_file: /tmp/syhub_setup.log # Path for the setup script's detailed log
 backup_directory: backups     # Relative to base_dir for config/data backups
 
+# --- Network Configuration ---
+# Set to false to skip AP+STA setup entirely (e.g., if using Ethernet or manual config)
+configure_network: false
+
 # --- WiFi Access Point (AP) + Station (STA) Mode ---
 wifi:
   ap_interface: uap0

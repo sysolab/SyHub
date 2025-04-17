@@ -296,6 +296,7 @@ load_all_config() {
         "hostname"
         "log_file"
         "backup_directory"
+        "configure_network"
         "wifi.ap_interface" "wifi.ap_ip" "wifi.ap_subnet_mask" "wifi.ap_dhcp_range_start" "wifi.ap_dhcp_range_end" "wifi.ap_dhcp_lease_time" "wifi.ap_ssid" "wifi.ap_password" "wifi.country_code" # <-- Added country_code
         "wifi.sta_ssid" "wifi.sta_password"
         "mqtt.port" "mqtt.username" "mqtt.client_id_base" "mqtt.password" "mqtt.topic_telemetry"
@@ -330,28 +331,61 @@ load_all_config() {
 }
 
 
-# Function to set up WiFi AP+STA Mode, Hostname, AP services, and mDNS
 # Function to set up WiFi AP+STA Mode, Hostname, and mDNS
 setup_network() {
-    log_message "INFO" "--- Starting Network Setup ---"
+    log_message "INFO" "--- Checking Network Setup Configuration ---"
 
-    # --- Configure system hostname ---
-    log_message "INFO" "Setting hostname to ${CONFIG[HOSTNAME]}"
+    # Check the configuration flag
+    if [[ "${CONFIG[CONFIGURE_NETWORK],,}" != "true" ]]; then
+        log_message "INFO" "configure_network is not 'true' in config.yml. Skipping AP+STA network configuration."
+        # Still configure hostname and basic Avahi if needed, as they don't strictly depend on AP+STA mode
+        # --- Configure system hostname ---
+        log_message "INFO" "Setting hostname to ${CONFIG[HOSTNAME]}"
+        local current_hostname
+        current_hostname=$(hostnamectl status --static)
+        if [[ "$current_hostname" != "${CONFIG[HOSTNAME]}" ]]; then
+            hostnamectl set-hostname "${CONFIG[HOSTNAME]}"
+            log_message "INFO" "Hostname updated."
+            if grep -q "127.0.1.1" /etc/hosts; then sed -i "s/^\(127\.0\.1\.1\s*\).*/\1${CONFIG[HOSTNAME]}/" /etc/hosts; else echo "127.0.1.1    ${CONFIG[HOSTNAME]}" >> /etc/hosts; fi
+            log_message "INFO" "/etc/hosts updated for ${CONFIG[HOSTNAME]}."
+            # Restart Avahi daemon after hostname change
+            log_message "INFO" "Restarting avahi-daemon due to hostname change..."
+            if systemctl is-active --quiet avahi-daemon; then systemctl restart avahi-daemon; else log_message "INFO" "avahi-daemon not active, skipping restart."; fi
+        else
+            log_message "INFO" "Hostname already set to ${CONFIG[HOSTNAME]}."
+        fi
+
+        # --- Configure Basic Avahi mDNS Service Definition ---
+        # Advertise basic device info even if full network setup is skipped
+        log_message "INFO" "Configuring minimal Avahi (mDNS/Bonjour Service Definitions)..."
+        if [[ -f "$TEMPLATE_DIR/syhub-avahi.service.j2" ]]; then
+             process_template "$TEMPLATE_DIR/syhub-avahi.service.j2" "/etc/avahi/services/syhub.service"
+             chmod 644 "/etc/avahi/services/syhub.service"
+             systemctl enable avahi-daemon &> /dev/null # Ensure enabled
+             systemctl restart avahi-daemon # Restart to pick up changes
+             log_message "INFO" "Avahi service definition updated/created."
+        else
+             log_message "WARNING" "Avahi template ($TEMPLATE_DIR/syhub-avahi.service.j2) not found. Cannot configure mDNS service discovery."
+        fi
+        log_message "INFO" "--- Network Setup Skipped (AP+STA Mode) ---"
+        return 0 # Exit the function successfully
+    fi
+
+    # --- Proceed with Full Network Setup ---
+    log_message "INFO" "--- Starting Full Network Setup (configure_network=true) ---"
+
+    # --- Configure system hostname (if not already done above) ---
+    log_message "INFO" "Setting/Verifying hostname: ${CONFIG[HOSTNAME]}"
     local current_hostname
     current_hostname=$(hostnamectl status --static)
     if [[ "$current_hostname" != "${CONFIG[HOSTNAME]}" ]]; then
         hostnamectl set-hostname "${CONFIG[HOSTNAME]}"
         log_message "INFO" "Hostname updated."
-        if grep -q "127.0.1.1" /etc/hosts; then
-            sed -i "s/^\(127\.0\.1\.1\s*\).*/\1${CONFIG[HOSTNAME]}/" /etc/hosts
-        else
-            echo "127.0.1.1    ${CONFIG[HOSTNAME]}" >> /etc/hosts
-        fi
+        if grep -q "127.0.1.1" /etc/hosts; then sed -i "s/^\(127\.0\.1\.1\s*\).*/\1${CONFIG[HOSTNAME]}/" /etc/hosts; else echo "127.0.1.1    ${CONFIG[HOSTNAME]}" >> /etc/hosts; fi
         log_message "INFO" "/etc/hosts updated for ${CONFIG[HOSTNAME]}."
-
         # Restart Avahi daemon after hostname change
         log_message "INFO" "Restarting avahi-daemon due to hostname change..."
-        systemctl restart avahi-daemon
+        if systemctl is-active --quiet avahi-daemon; then systemctl restart avahi-daemon; else log_message "INFO" "avahi-daemon not active, skipping restart."; fi
     else
         log_message "INFO" "Hostname already set to ${CONFIG[HOSTNAME]}."
     fi
@@ -362,104 +396,106 @@ setup_network() {
         log_message "ERROR" "Avahi template not found at $TEMPLATE_DIR/syhub-avahi.service.j2"
         exit 1
     fi
-    # Note: Ensure syhub-avahi.service.j2 uses interface 'ap0'
     process_template "$TEMPLATE_DIR/syhub-avahi.service.j2" "/etc/avahi/services/syhub.service"
-    chmod 644 /etc/avahi/services/syhub.service
-    # Ensure Avahi is enabled and running (might have been restarted above)
-    systemctl enable avahi-daemon
-    systemctl restart avahi-daemon # Restart again to ensure it picks up new service file
+    chmod 644 "/etc/avahi/services/syhub.service"
+    systemctl enable avahi-daemon &> /dev/null # Ensure enabled
+    systemctl restart avahi-daemon # Restart to pick up changes
+    log_message "INFO" "Avahi service definition updated/created."
 
     # --- Prepare for AP+STA Script Execution ---
-    # Ensure /var/log/ap_sta_wifi directory exists for the scripts' logs
     local ap_sta_log_dir="/var/log/ap_sta_wifi"
     log_message "INFO" "Ensuring AP/STA log directory exists: $ap_sta_log_dir"
     mkdir -p "$ap_sta_log_dir"
-    # Set ownership/permissions for the log directory (root owner, writable by root)
-    chown root:root "$ap_sta_log_dir"
-    chmod 755 "$ap_sta_log_dir" # Root rwx, others rx
+    chown root:adm "$ap_sta_log_dir" # Group adm can often read logs
+    chmod 750 "$ap_sta_log_dir" # Root rwx, group rx
 
-    # Define cron script log file paths (absolute paths)
-    # Use the directory we just created
     local cron_log_file_ap0_mgnt="$ap_sta_log_dir/ap0_mgnt.log"
     local cron_log_file_on_boot="$ap_sta_log_dir/on_boot.log"
 
-    # Ensure log files exist and have correct permissions (root owner, writable by root)
     touch "$cron_log_file_ap0_mgnt" "$cron_log_file_on_boot"
-    chown root:root "$cron_log_file_ap0_mgnt" "$cron_log_file_on_boot"
-    chmod 644 "$cron_log_file_ap0_mgnt" "$cron_log_file_on_boot"
+    chown root:adm "$cron_log_file_ap0_mgnt" "$cron_log_file_on_boot"
+    chmod 640 "$cron_log_file_ap0_mgnt" "$cron_log_file_on_boot" # Root rw, group r
 
     # --- Set Environment Variables for Scripts ---
-    # Export config values as environment variables for the local scripts
     log_message "INFO" "Exporting configuration as environment variables for AP/STA scripts..."
+    # Use default values here primarily as fallback, syhub.sh load_all_config should enforce mandatory ones
     export SYHUB_AP_SSID="${CONFIG[WIFI_AP_SSID]}"
-    export SYHUB_AP_PASSWORD="${CONFIG[WIFI_AP_PASSWORD]}"
+    export SYHUB_AP_PASSWORD="${CONFIG[WIFI_AP_PASSWORD]:-}" # Allow empty
     export SYHUB_CLIENT_SSID="${CONFIG[WIFI_STA_SSID]}"
-    export SYHUB_CLIENT_PASSWORD="${CONFIG[WIFI_STA_PASSWORD]}"
+    export SYHUB_CLIENT_PASSWORD="${CONFIG[WIFI_STA_PASSWORD]:-}" # Allow empty
     export SYHUB_COUNTRY_CODE="${CONFIG[WIFI_COUNTRY_CODE]}"
     export SYHUB_AP_IP="${CONFIG[WIFI_AP_IP]}"
-    # export SYHUB_WIFI_MODE="${CONFIG[WIFI_MODE]}" # Add this if you put wifi_mode in config
-    # export SYHUB_AP_ONLY="false" # Assume full AP+STA setup unless specific action requires otherwise
-    # export SYHUB_STA_ONLY="false"
-    # export SYHUB_NO_INTERNET="false" # Set to true if you don't want internet sharing
-    export SYHUB_HOSTNAME="${CONFIG[HOSTNAME]}" # Pass hostname for dnsmasq domain
-    export SYHUB_BASE_DIR="$SYHUB_BASE_DIR"     # Pass base dir if scripts need it
+    # Optional - Add WIFI_MODE to config.yml if needed
+    # export SYHUB_WIFI_MODE="${CONFIG[WIFI_MODE]:-'g'}"
+    # Flags - Could be made configurable too
+    export SYHUB_AP_ONLY="false"
+    export SYHUB_STA_ONLY="false"
+    export SYHUB_NO_INTERNET="false" # Set to true in config? Or fixed based on project needs?
+    export SYHUB_HOSTNAME="${CONFIG[HOSTNAME]}"
+    export SYHUB_BASE_DIR="$SYHUB_BASE_DIR"
 
     # Log file paths for the cron script
     export SYHUB_CRON_LOG_FILE_AP0_MGNT="$cron_log_file_ap0_mgnt"
     export SYHUB_CRON_LOG_FILE_ON_BOOT="$cron_log_file_on_boot"
 
-
     # --- Execute Local AP+STA Configuration Script ---
-    log_message "INFO" "Executing local script: $SCRIPT_DIR/ap_sta_config.sh"
-    if ! bash "$SCRIPT_DIR/ap_sta_config.sh"; then
+    local ap_sta_config_script="$SCRIPT_DIR/ap_sta_config.sh"
+    log_message "INFO" "Executing local script: $ap_sta_config_script"
+    if [[ ! -f "$ap_sta_config_script" ]]; then
+        log_message "ERROR" "AP+STA config script not found at $ap_sta_config_script"
+        # Unset env vars before exiting
+        unset SYHUB_AP_SSID SYHUB_AP_PASSWORD SYHUB_CLIENT_SSID SYHUB_CLIENT_PASSWORD SYHUB_COUNTRY_CODE SYHUB_AP_IP SYHUB_WIFI_MODE SYHUB_AP_ONLY SYHUB_STA_ONLY SYHUB_NO_INTERNET SYHUB_HOSTNAME SYHUB_BASE_DIR SYHUB_CRON_LOG_FILE_AP0_MGNT SYHUB_CRON_LOG_FILE_ON_BOOT
+        exit 1
+    fi
+    if ! bash "$ap_sta_config_script"; then
         log_message "ERROR" "Local script ap_sta_config.sh failed. Check its output/logs."
-        # Unset environment variables on failure before exiting
-        unset SYHUB_AP_SSID SYHUB_AP_PASSWORD SYHUB_CLIENT_SSID SYHUB_CLIENT_PASSWORD SYHUB_COUNTRY_CODE SYHUB_AP_IP SYHUB_HOSTNAME SYHUB_BASE_DIR SYHUB_CRON_LOG_FILE_AP0_MGNT SYHUB_CRON_LOG_FILE_ON_BOOT
+        unset SYHUB_AP_SSID SYHUB_AP_PASSWORD SYHUB_CLIENT_SSID SYHUB_CLIENT_PASSWORD SYHUB_COUNTRY_CODE SYHUB_AP_IP SYHUB_WIFI_MODE SYHUB_AP_ONLY SYHUB_STA_ONLY SYHUB_NO_INTERNET SYHUB_HOSTNAME SYHUB_BASE_DIR SYHUB_CRON_LOG_FILE_AP0_MGNT SYHUB_CRON_LOG_FILE_ON_BOOT
         exit 1
     fi
     log_message "INFO" "Local script ap_sta_config.sh finished execution."
 
-     # Unset environment variables after use
-    unset SYHUB_AP_SSID SYHUB_AP_PASSWORD SYHUB_CLIENT_SSID SYHUB_CLIENT_PASSWORD SYHUB_COUNTRY_CODE SYHUB_AP_IP SYHUB_HOSTNAME SYHUB_BASE_DIR
-
+    # Unset non-cron related environment variables after use
+    unset SYHUB_AP_SSID SYHUB_AP_PASSWORD SYHUB_CLIENT_SSID SYHUB_CLIENT_PASSWORD SYHUB_COUNTRY_CODE SYHUB_AP_IP SYHUB_WIFI_MODE SYHUB_AP_ONLY SYHUB_STA_ONLY SYHUB_NO_INTERNET SYHUB_HOSTNAME SYHUB_BASE_DIR
 
     # --- Execute Local AP+STA Cron Script ---
     # Ensure root's crontab is initialized if it doesn't exist yet
-    if [[ 1 -eq $(crontab -l | grep -cF "no crontab for root") ]]; then
+    if crontab -l &> /dev/null && [[ 1 -eq $(crontab -l | grep -cF "no crontab for root") ]]; then
          log_message "INFO" "Initializing root's crontab..."
-         # Add a dummy comment to initialize crontab
-         (crontab -l 2>/dev/null; echo "# Initialized by syhub.sh") | crontab - || {
+         (crontab -l 2>/dev/null; echo "# Initialized by syhub.sh $(date)") | crontab - || {
               log_message "WARNING" "Failed to initialize root's crontab. Cron jobs might not be set up."
          }
     else
-        log_message "INFO" "Root's crontab already initialized."
+        log_message "INFO" "Root's crontab already exists or initialized."
     fi
 
-    log_message "INFO" "Executing local script: $SCRIPT_DIR/ap_sta_cron.sh"
-    # Pass only the log path env vars needed by the cron script
-    if ! bash "$SCRIPT_DIR/ap_sta_cron.sh"; then
+    local ap_sta_cron_script="$SCRIPT_DIR/ap_sta_cron.sh"
+    log_message "INFO" "Executing local script: $ap_sta_cron_script"
+    if [[ ! -f "$ap_sta_cron_script" ]]; then
+        log_message "ERROR" "AP+STA cron script not found at $ap_sta_cron_script"
+        unset SYHUB_CRON_LOG_FILE_AP0_MGNT SYHUB_CRON_LOG_FILE_ON_BOOT
+        exit 1
+    fi
+    if ! bash "$ap_sta_cron_script"; then
         log_message "ERROR" "Local script ap_sta_cron.sh failed. Check its output/logs."
-         # Unset environment variables on failure before exiting
         unset SYHUB_CRON_LOG_FILE_AP0_MGNT SYHUB_CRON_LOG_FILE_ON_BOOT
         exit 1
     fi
     log_message "INFO" "Local script ap_sta_cron.sh finished execution."
 
-     # Unset environment variables after use
+    # Unset environment variables after use
     unset SYHUB_CRON_LOG_FILE_AP0_MGNT SYHUB_CRON_LOG_FILE_ON_BOOT
 
-
     # --- Verification Step ---
-    # Verify the IP address assigned by the script
     local expected_ap_ip="${CONFIG[WIFI_AP_IP]}"
-    local ap_interface="${CONFIG[WIFI_AP_INTERFACE]}"
+    local ap_interface="${CONFIG[WIFI_AP_INTERFACE]}" # Use interface name from config
 
     log_message "INFO" "Verifying network interface configuration after script execution..."
-    sleep 5 # Give network services a bit more time after scripts
-    local verify_attempts=6 # More attempts now as external scripts do restarts
+    sleep 5 # Allow network services time to settle
+    local verify_attempts=6
     local verify_success=false
     for ((i=1; i<=verify_attempts; i++)); do
         log_message "INFO" "Verification attempt $i/$verify_attempts for IP $expected_ap_ip on $ap_interface..."
+        # Check if interface exists and has the IP assigned
         if ip addr show "$ap_interface" &> /dev/null && ip addr show "$ap_interface" | grep -q "inet $expected_ap_ip/"; then
             log_message "INFO" "Successfully verified IP $expected_ap_ip on interface $ap_interface."
             verify_success=true
@@ -468,52 +504,50 @@ setup_network() {
             log_message "WARNING" "Attempt $i: Interface $ap_interface or IP $expected_ap_ip not found/assigned yet."
             if [[ $i -lt $verify_attempts ]]; then
                 log_message "INFO" "Retrying verification in 10 seconds..."
-                sleep 10 # Wait longer
+                sleep 10
             fi
         fi
     done
 
     if ! $verify_success; then
         log_message "ERROR" "Failed to verify expected AP IP $expected_ap_ip on $ap_interface after $verify_attempts attempts."
-        log_message "ERROR" "Check logs in $ap_sta_log_dir, /etc/dhcpcd.conf, /etc/network/interfaces, /etc/hostapd/hostapd.conf, /etc/dnsmasq.d/01-syhub-ap.conf, and journalctl for related services (hostapd, dnsmasq, dhcpcd, networking)."
-         # Check if the script used its default IP instead:
+        log_message "ERROR" "Check logs in $ap_sta_log_dir, config files in /etc/, and journalctl for hostapd, dnsmasq, dhcpcd, networking."
+         # Check if the script used its internal default IP (192.168.50.1)
         if ip addr show "$ap_interface" &> /dev/null && ip addr show "$ap_interface" | grep -q "inet 192.168.50.1/"; then
-             log_message "WARNING" "Detected default IP 192.168.50.1 instead of expected $expected_ap_ip on $ap_interface."
-             log_message "WARNING" "Consider updating config.yml or verifying ap_sta_config.sh source if this is not desired."
+             log_message "WARNING" "Detected fallback IP 192.168.50.1 instead of expected $expected_ap_ip on $ap_interface."
+             log_message "WARNING" "Ensure SYHUB_AP_IP environment variable was correctly passed to ap_sta_config.sh or update config.yml."
         fi
-        # Decide whether to proceed or exit based on this finding. Let's exit as networking is fundamental.
-        exit 1
+        exit 1 # Exit if verification fails
     fi
     # --- End Verification Step ---
 
-
     # --- Network Service Status Check ---
-    # Scripts should have restarted these, we just check final status
     log_message "INFO" "Verifying core network service statuses..."
-    local core_network_services=( hostapd dnsmasq )
+    local core_network_services=( hostapd dnsmasq dhcpcd wpa_supplicant) # Added wpa_supplicant
     for service in "${core_network_services[@]}"; do
          if systemctl is-active --quiet "$service"; then
              log_message "INFO" "Service '$service' is active."
          else
-             log_message "WARNING" "Service '$service' is NOT active. Check logs: journalctl -u $service"
+             # wpa_supplicant might not be active if STA fails connection, treat as warning
+             if [[ "$service" == "wpa_supplicant" ]]; then
+                 log_message "WARNING" "Service '$service' is NOT active. STA connection likely failed. Check 'iwconfig wlan0' and logs: journalctl -u $service"
+             else
+                  log_message "ERROR" "Service '$service' is NOT active. Check logs: journalctl -u $service"
+                  # Consider exiting if hostapd or dnsmasq fail
+                  # exit 1
+             fi
          fi
     done
-    # Check dhcpcd too, it should be active for STA mode
-     if systemctl is-active --quiet dhcpcd; then
-         log_message "INFO" "Service 'dhcpcd' is active."
-     else
-         log_message "WARNING" "Service 'dhcpcd' is NOT active. Check logs: journalctl -u dhcpcd"
-     fi
 
-
-    log_message "INFO" "--- Network Setup Finished ---"
+    log_message "INFO" "--- Full Network Setup Finished ---"
     log_message "INFO" "AP SSID: ${CONFIG[WIFI_AP_SSID]} should be visible."
     log_message "INFO" "STA Connection: Should attempt connection to ${CONFIG[WIFI_STA_SSID]}. Check router logs or 'iwconfig wlan0'."
     log_message "INFO" "Hostname: ${CONFIG[HOSTNAME]}"
-    log_message "INFO" "AP IP Address appears to be: $(ip addr show "$ap_interface" | grep "inet " | awk '{print $2}' | cut -d/ -f1)" # Show detected IP
+    log_message "INFO" "AP IP Address appears to be: $(ip addr show "$ap_interface" | grep "inet " | awk '{print $2}' | cut -d/ -f1 || echo "Not Detected")"
     log_message "INFO" "Access dashboard (once set up) at http://${CONFIG[HOSTNAME]}:${CONFIG[DASHBOARD_PORT]}"
     log_message "INFO" "AP/STA script logs are in $ap_sta_log_dir"
 }
+
 
 
 setup_mqtt() {
@@ -849,8 +883,17 @@ action_update() {
 }
 
 action_purge() {
+    # Ensure logging is set up for this action
     setup_logging "purge"
-    load_all_config # Need config for paths (e.g., data dirs)
+    # Load config to get paths and the configure_network flag
+    # Need to handle case where config or yq might be missing if purge is run after partial failure
+    if ! command -v yq &> /dev/null || [[ ! -f "$CONFIG_FILE" ]]; then
+         log_message "ERROR" "Cannot load config ($CONFIG_FILE) or yq is missing. Full purge cannot proceed reliably."
+         log_message "ERROR" "Manual cleanup required. Stopping known services..."
+         systemctl stop flask-dashboard nodered victoriametrics mosquitto hostapd dnsmasq avahi-daemon || true # Ignore errors if already stopped
+         exit 1
+    fi
+    load_all_config # Load all config values
 
     log_message "WARNING" "--- Starting syHub Purge ---"
     log_message "WARNING" "This will stop services, remove configuration, and potentially delete data!"
@@ -861,66 +904,70 @@ action_purge() {
     fi
 
     log_message "INFO" "Stopping and disabling syHub services..."
-    # Stop core syHub services + network components managed by the scripts
+    # Stop core syHub services + network components potentially managed
     systemctl stop flask-dashboard nodered victoriametrics mosquitto hostapd dnsmasq avahi-daemon || log_message "WARNING" "Some services might have already been stopped."
     systemctl disable flask-dashboard nodered victoriametrics mosquitto hostapd dnsmasq || log_message "WARNING" "Some services might have already been disabled."
-    # Do NOT disable dhcpcd unless the user specifically wants to return to a base OS state.
-    # systemctl disable dhcpcd
+    # Stop wpa_supplicant service if running on wlan0 (often managed automatically)
+    # systemctl stop wpa_supplicant@wlan0.service || true # Ignore errors
 
-    log_message "INFO" "Removing systemd service files..."
+    log_message "INFO" "Removing syHub systemd service files..."
     rm -f /etc/systemd/system/flask-dashboard.service \
           /etc/systemd/system/nodered.service \
           /etc/systemd/system/victoriametrics.service
     systemctl daemon-reload
 
-    log_message "INFO" "Removing syHub specific configuration files..."
+    # --- Conditionally Remove Network Configs ---
+    if [[ "${CONFIG[CONFIGURE_NETWORK],,}" == "true" ]]; then
+        log_message "INFO" "Removing network configuration files installed by syHub AP+STA setup..."
+        rm -f /etc/dnsmasq.d/01-syhub-ap.conf
+        rm -f /bin/manage-ap0-iface.sh
+        rm -f /bin/rpi-wifi.sh
+        rm -f /etc/hostapd/hostapd.conf
+        # Restore backup of /etc/default/hostapd if it exists? Or remove our line?
+        # sed -i '/DAEMON_CONF="\/etc\/hostapd\/hostapd.conf"/d' /etc/default/hostapd # Example removal
+        rm -f /etc/wpa_supplicant/wpa_supplicant.conf
+        rm -f /etc/udev/rules.d/70-persistent-net.rules
+
+        read -p "Restore default /etc/network/interfaces (y/N)? (Warning: This removes syHub config): " restore_interfaces
+        if [[ "${restore_interfaces,,}" == "y" ]]; then
+             log_message "INFO" "Restoring default /etc/network/interfaces..."
+             # Create a minimal default config
+             cat << EOF > /etc/network/interfaces
+source-directory /etc/network/interfaces.d
+auto lo
+iface lo inet loopback
+EOF
+             # Recommend using dhcpcd for primary interface management
+             log_message "INFO" "Consider ensuring dhcpcd is enabled for standard network management."
+        else
+             log_message "INFO" "Skipping modification of /etc/network/interfaces."
+        fi
+
+        log_message "INFO" "Removing AP+STA cron job and log directory..."
+        (crontab -l 2>/dev/null | grep -v "/bin/manage-ap0-iface.sh" | grep -v "/bin/rpi-wifi.sh") | crontab - || log_message "WARNING" "Failed to remove AP+STA cron jobs."
+        rm -f /tmp/syhub_ap0_manage.lock
+
+        read -p "Delete AP+STA log directory (/var/log/ap_sta_wifi)? (yes/N): " del_apsta_logs
+        if [[ "${del_apsta_logs,,}" == "yes" ]]; then
+            log_message "INFO" "Deleting AP+STA log directory..."
+            rm -rf /var/log/ap_sta_wifi
+        else
+            log_message "INFO" "Skipping AP+STA log directory deletion."
+        fi
+    else
+         log_message "INFO" "Skipping removal of network configuration files (configure_network was false)."
+    fi
+    # --- End Conditional Removal ---
+
+    # Remove other syHub configs unconditionally
+    log_message "INFO" "Removing other syHub configuration files..."
     rm -f /etc/mosquitto/conf.d/syhub.conf
     rm -f /etc/mosquitto/passwd
     rm -f /etc/avahi/services/syhub.service
-    rm -f /etc/dnsmasq.d/01-syhub-ap.conf # Remove our dnsmasq config
-    # Do NOT remove /etc/dnsmasq.conf as other services might use it
 
-    # Remove files installed by ap_sta_config.sh scripts in /bin/
-    log_message "INFO" "Removing AP+STA helper scripts from /bin/..."
-    rm -f /bin/manage-ap0-iface.sh
-    rm -f /bin/rpi-wifi.sh
-    log_message "INFO" "Removing AP+STA related configuration files..."
-    rm -f /etc/hostapd/hostapd.conf # Config file written by ap_sta_config.sh
-    # Restore /etc/default/hostapd ? The ap_sta script just writes DAEMON_CONF.
-    # If you have a backup from a previous run, consider restoring that.
-    # For now, we just remove the config file it points to.
-    rm -f /etc/wpa_supplicant/wpa_supplicant.conf # STA config
-    # WARNING: Removing /etc/network/interfaces might break default networking.
-    # Only do this if you are sure, or restore a backup.
-    read -p "Remove /etc/network/interfaces file modified by syHub? (y/N): " remove_interfaces
-    if [[ "${remove_interfaces,,}" == "y" ]]; then
-         log_message "INFO" "Removing /etc/network/interfaces..."
-         rm -f /etc/network/interfaces
-    else
-         log_message "INFO" "Skipping removal of /etc/network/interfaces."
-    fi
-    # Consider removing the udev rule if it was installed
-    rm -f /etc/udev/rules.d/70-persistent-net.rules
-
-
-    log_message "INFO" "Removing AP+STA cron job and log directory..."
-    # Remove the cron job entries from root's crontab
-    (crontab -l 2>/dev/null | grep -v "/bin/manage-ap0-iface.sh" | grep -v "/bin/rpi-wifi.sh") | crontab - || log_message "WARNING" "Failed to remove AP+STA cron jobs."
-    rm -f /tmp/syhub_ap0_manage.lock # Remove lock file
-
-    # Remove the log directory
-    read -p "Delete AP+STA log directory (/var/log/ap_sta_wifi)? (yes/N): " del_apsta_logs
-    if [[ "${del_apsta_logs,,}" == "yes" ]]; then
-        log_message "INFO" "Deleting AP+STA log directory..."
-        rm -rf /var/log/ap_sta_wifi
-    else
-        log_message "INFO" "Skipping AP+STA log directory deletion."
-    fi
-
-
-    log_message "INFO" "Removing VictoriaMetrics binary and user..."
+    # --- Remove Data Directories (with prompts) ---
+    log_message "INFO" "Removing VictoriaMetrics binary and data..."
     rm -f /usr/local/bin/victoria-metrics-prod
-    # Ask user about deleting data
     read -p "Delete VictoriaMetrics data directory (${CONFIG[VICTORIA_METRICS_DATA_DIRECTORY]})? (yes/N): " del_vm_data
     if [[ "${del_vm_data,,}" == "yes" ]]; then
         log_message "INFO" "Deleting VictoriaMetrics data directory..."
@@ -928,22 +975,13 @@ action_purge() {
     else
         log_message "INFO" "Skipping VictoriaMetrics data directory deletion."
     fi
-    # Delete user/group only if purging completely
+    # Delete VM user/group
     local vm_user="${CONFIG[VICTORIA_METRICS_SERVICE_USER]}"
     local vm_group="${CONFIG[VICTORIA_METRICS_SERVICE_GROUP]}"
-    if getent passwd "$vm_user" > /dev/null; then
-        userdel "$vm_user" || log_message "WARNING" "Failed to delete user $vm_user."
-    fi
-     if getent group "$vm_group" > /dev/null; then
-        if [[ -z $(getent group "$vm_group" | cut -d: -f4) ]]; then
-             groupdel "$vm_group" || log_message "WARNING" "Failed to delete group $vm_group."
-        else
-             log_message "WARNING" "Group $vm_group not deleted because it might not be empty."
-        fi
-    fi
+    if getent passwd "$vm_user" > /dev/null; then userdel "$vm_user" || log_message "WARNING" "Failed to delete user $vm_user."; fi
+    if getent group "$vm_group" > /dev/null; then if [[ -z $(getent group "$vm_group" | cut -d: -f4) ]]; then groupdel "$vm_group" || log_message "WARNING" "Failed to delete group $vm_group."; else log_message "WARNING" "Group $vm_group not deleted because it might not be empty."; fi fi
 
-
-    log_message "INFO" "Removing Node-RED data directory..."
+    log_message "INFO" "Removing Node-RED data..."
     read -p "Delete Node-RED data directory (${NODE_RED_DATA_DIR})? (yes/N): " del_nr_data
     if [[ "${del_nr_data,,}" == "yes" ]]; then
         log_message "INFO" "Deleting Node-RED data directory..."
@@ -952,6 +990,7 @@ action_purge() {
         log_message "INFO" "Skipping Node-RED data directory deletion."
     fi
 
+    # --- Remove Application Base Directory ---
     log_message "INFO" "Removing application base directory..."
     read -p "Delete application base directory (${SYHUB_BASE_DIR})? (yes/N): " del_base_dir
     if [[ "${del_base_dir,,}" == "yes" ]]; then
@@ -961,13 +1000,13 @@ action_purge() {
         log_message "INFO" "Skipping application base directory deletion."
     fi
 
+    # --- Reset Hostname ---
     log_message "INFO" "Resetting hostname to default (raspberrypi)..."
     hostnamectl set-hostname raspberrypi
-     # Remove or modify the 127.0.1.1 line related to our hostname
+    # Remove or modify the 127.0.1.1 line related to our hostname
     if grep -q "${CONFIG[HOSTNAME]}" /etc/hosts; then
          sed -i "/127.0.1.1.*${CONFIG[HOSTNAME]}/d" /etc/hosts
     fi
-
 
     log_message "WARNING" "--- syHub Purge Completed ---"
     log_message "WARNING" "Review network configurations in /etc/ and /var/log/ for any remaining artifacts."
