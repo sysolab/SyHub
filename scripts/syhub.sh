@@ -133,6 +133,7 @@ check_internet() {
 }
 
 # Process a template file using sed for simple substitution
+# Process a template file using sed for simple substitution
 process_template() {
     local template_path="$1"
     local output_path="$2"
@@ -144,27 +145,64 @@ process_template() {
     fi
 
     temp_file=$(mktemp)
-    cp "$template_path" "$temp_file"
+    # Use cat instead of cp to handle potential edge cases with special files
+    cat "$template_path" > "$temp_file" || { log_message "ERROR" "Failed to copy template '$template_path' to temp file."; rm -f "$temp_file"; exit 1; }
+
 
     log_message "INFO" "Processing template $template_path -> $output_path"
 
     # Dynamically create sed expressions for all loaded config variables
     local sed_expressions=""
-    # Use process substitution and mapfile to read variable names from associative array keys
     mapfile -t config_keys < <(printf "%s\n" "${!CONFIG[@]}")
 
     for key_upper in "${config_keys[@]}"; do
          # Placeholder format: __KEY_UPPER__
          placeholder="__${key_upper}__"
-         value="${CONFIG[$key_upper]}"
-         # Escape sed special characters: / & \
-         escaped_value=$(sed -e 's/[\/&]/\\&/g' <<< "$value")
-         sed_expressions+=" -e s|${placeholder}|${escaped_value}|g" # Using | as delimiter
+         # Check if the placeholder actually exists in the template file before adding expression
+         # This prevents unnecessary processing and potential errors for unused placeholders
+         if grep -q "$placeholder" "$temp_file"; then
+             value="${CONFIG[$key_upper]}"
+             # Escape sed special characters: / & \ and the chosen delimiter @
+             # 1. Escape backslashes first
+             escaped_value="${value//\\/\\\\}"
+             # 2. Escape the delimiter (@)
+             escaped_value="${escaped_value//@/\\@}"
+             # 3. Escape forward slashes
+             escaped_value="${escaped_value//\//\\/}"
+             # 4. Escape ampersands
+             escaped_value="${escaped_value//&/\\&}"
+
+             # Add sed expression using @ as delimiter. Quote the placeholder and escaped value.
+             # The 'g' flag replaces all occurrences on a line.
+             sed_expressions+=" -e s@${placeholder}@${escaped_value}@g"
+             # Log the replacement being added (optional, can be noisy)
+             # log_message "DEBUG" "Adding sed rule: s@${placeholder}@...value_hidden...@g"
+         fi
     done
 
-    # Execute sed with all expressions
-    # shellcheck disable=SC2086 # We need word splitting for sed_expressions
-    sed $sed_expressions "$temp_file" > "$output_path"
+    # Check if any expressions were generated
+    if [[ -z "$sed_expressions" ]]; then
+         log_message "INFO" "No placeholders found in template '$template_path'. Copying directly."
+         cp "$temp_file" "$output_path"
+    else
+        # Execute sed with all expressions. Quote the expression string variable.
+        # Using eval here allows the shell to correctly parse the multiple -e options.
+        # Ensure security: We escaped potentially harmful characters above.
+        eval sed "$sed_expressions" "$temp_file" > "$output_path" || {
+             log_message "ERROR" "Sed command failed while processing template '$template_path'."
+             # Log the expressions for debugging (careful with secrets if not redacted)
+             # log_message "ERROR" "Sed expressions used: ${sed_expressions}"
+             rm -f "$temp_file"
+             exit 1
+        }
+    fi
+
+    # Verify output file was created
+     if [[ ! -f "$output_path" ]]; then
+        log_message "ERROR" "Output file '$output_path' was not created after processing template '$template_path'."
+        rm -f "$temp_file"
+        exit 1
+     fi
 
     rm "$temp_file"
     log_message "INFO" "Generated $output_path"
