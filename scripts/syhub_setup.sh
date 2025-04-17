@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # syhub.sh: Setup script for IoT monitoring system on Raspberry Pi
+# Version: 1.2.0
 # Manages WiFi AP+STA, Mosquitto, VictoriaMetrics, Node-RED, and Flask dashboard
 
 # Function to check if script is run as root
@@ -24,38 +25,73 @@ set_user_home() {
     fi
 }
 
+# Function to install and verify yq
+install_yq() {
+    if ! command -v yq &> /dev/null || ! yq --version | grep -q "mikefarah/yq"; then
+        echo "Installing or updating yq (version 4.x)..."
+        sudo apt update
+        wget https://github.com/mikefarah/yq/releases/download/v4.35.2/yq_linux_arm64 -O /usr/local/bin/yq || { echo "Failed to download yq"; exit 1; }
+        sudo chmod +x /usr/local/bin/yq
+    fi
+    YQ_VERSION=$(yq --version | awk '{print $NF}')
+    if [[ ! "$YQ_VERSION" =~ ^4\..* ]]; then
+        echo "Error: yq version $YQ_VERSION is not supported. Requires version 4.x."
+        exit 1
+    fi
+}
+
 # Function to load configuration from config.yml
 load_config() {
-    if ! command -v yq &> /dev/null; then
-        echo "Installing yq for YAML parsing..."
-        sudo apt update
-        sudo apt install -y yq || { echo "Failed to install yq"; exit 1; }
-    fi
+    install_yq
 
     CONFIG_FILE="$USER_HOME/syhub/config/config.yml"
+    echo "Loading configuration from $CONFIG_FILE..."
     if [ ! -f "$CONFIG_FILE" ]; then
         echo "Config file $CONFIG_FILE not found!"
         exit 1
     fi
 
-    PROJECT_NAME=$(yq e '.project.name' "$CONFIG_FILE")
-    WIFI_SSID=$(yq e '.project.wifi_ssid' "$CONFIG_FILE")
-    WIFI_PASSWORD=$(yq e '.project.wifi_password' "$CONFIG_FILE")
-    STA_WIFI_SSID=$(yq e '.project.sta_wifi_ssid' "$CONFIG_FILE")
-    STA_WIFI_PASSWORD=$(yq e '.project.sta_wifi_password' "$CONFIG_FILE")
-    MQTT_USERNAME=$(yq e '.project.mqtt.username' "$CONFIG_FILE")
-    MQTT_PASSWORD=$(yq e '.project.mqtt.password' "$CONFIG_FILE")
-    MQTT_PORT=$(yq e '.project.mqtt.port' "$CONFIG_FILE")
-    MQTT_TOPIC=$(yq e '.project.mqtt.topic' "$CONFIG_FILE")
-    VM_PORT=$(yq e '.project.victoria_metrics.port' "$CONFIG_FILE")
-    NR_PORT=$(yq e '.project.node_red.port' "$CONFIG_FILE")
-    DASHBOARD_PORT=$(yq e '.project.dashboard.port' "$CONFIG_FILE")
-    NR_USERNAME=$(yq e '.project.node_red_username' "$CONFIG_FILE")
-    NR_PASSWORD_HASH=$(yq e '.project.node_red_password_hash' "$CONFIG_FILE")
+    # Validate YAML syntax
+    yq e '.' "$CONFIG_FILE" > /dev/null || { echo "Error: $CONFIG_FILE contains invalid YAML"; exit 1; }
 
-    # Validate STA WiFi settings
-    if [ -z "$STA_WIFI_SSID" ] || [ -z "$STA_WIFI_PASSWORD" ]; then
-        echo "Error: sta_wifi_ssid and sta_wifi_password must be set in $CONFIG_FILE"
+    # Load configuration with error handling
+    PROJECT_NAME=$(yq e '.project.name' "$CONFIG_FILE" 2>/dev/null || echo "")
+    WIFI_SSID=$(yq e '.project.wifi_ssid' "$CONFIG_FILE" 2>/dev/null || echo "")
+    WIFI_PASSWORD=$(yq e '.project.wifi_password' "$CONFIG_FILE" 2>/dev/null || echo "")
+    STA_WIFI_SSID=$(yq e '.project.sta_wifi_ssid' "$CONFIG_FILE" 2>/dev/null || echo "")
+    STA_WIFI_PASSWORD=$(yq e '.project.sta_wifi_password' "$CONFIG_FILE" 2>/dev/null || echo "")
+    MQTT_USERNAME=$(yq e '.project.mqtt.username' "$CONFIG_FILE" 2>/dev/null || echo "")
+    MQTT_PASSWORD=$(yq e '.project.mqtt.password' "$CONFIG_FILE" 2>/dev/null || echo "")
+    MQTT_PORT=$(yq e '.project.mqtt.port' "$CONFIG_FILE" 2>/dev/null || echo "")
+    MQTT_TOPIC=$(yq e '.project.mqtt.topic' "$CONFIG_FILE" 2>/dev/null || echo "")
+    VM_PORT=$(yq e '.project.victoria_metrics.port' "$CONFIG_FILE" 2>/dev/null || echo "")
+    NR_PORT=$(yq e '.project.node_red.port' "$CONFIG_FILE" 2>/dev/null || echo "")
+    DASHBOARD_PORT=$(yq e '.project.dashboard.port' "$CONFIG_FILE" 2>/dev/null || echo "")
+    NR_USERNAME=$(yq e '.project.node_red_username' "$CONFIG_FILE" 2>/dev/null || echo "")
+    NR_PASSWORD_HASH=$(yq e '.project.node_red_password_hash' "$CONFIG_FILE" 2>/dev/null || echo "")
+
+    # Validate required fields
+    if [ -z "$PROJECT_NAME" ] || [ -z "$WIFI_SSID" ] || [ -z "$WIFI_PASSWORD" ] || \
+       [ -z "$STA_WIFI_SSID" ] || [ -z "$STA_WIFI_PASSWORD" ] || \
+       [ -z "$MQTT_USERNAME" ] || [ -z "$MQTT_PASSWORD" ] || [ -z "$MQTT_PORT" ] || \
+       [ -z "$MQTT_TOPIC" ] || [ -z "$VM_PORT" ] || [ -z "$NR_PORT" ] || \
+       [ -z "$DASHBOARD_PORT" ] || [ -z "$NR_USERNAME" ] || [ -z "$NR_PASSWORD_HASH" ]; then
+        echo "Error: One or more required fields are missing or invalid in $CONFIG_FILE"
+        echo "Please verify the following fields in $CONFIG_FILE:"
+        echo "- project.name"
+        echo "- project.wifi_ssid"
+        echo "- project.wifi_password"
+        echo "- project.sta_wifi_ssid"
+        echo "- project.sta_wifi_password"
+        echo "- project.mqtt.username"
+        echo "- project.mqtt.password"
+        echo "- project.mqtt.port"
+        echo "- project.mqtt.topic"
+        echo "- project.victoria_metrics.port"
+        echo "- project.node_red.port"
+        echo "- project.dashboard.port"
+        echo "- project.node_red_username"
+        echo "- project.node_red_password_hash"
         exit 1
     fi
 }

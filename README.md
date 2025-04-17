@@ -30,13 +30,34 @@ Prepare the Project Directory:
 mkdir -p ~/syhub/{config,scripts,static,templates}
 
 
-Copy Files: Place all provided files in their respective locations under ~/syhub/. Ensure the setup script is named syhub.sh (not syhub_setup.sh).
+Copy Files: Place all provided files in their respective locations under ~/syhub/. The setup script should be syhub.sh. If you copy syhub.sh to syhub_setup.sh, ensure the contents match exactly. For user plantomioX1, files should be in /home/plantomioX1/syhub/.
 
-Update config.yml: Modify ~/syhub/config/config.yml with your desired settings:
+Verify config.yml: Ensure config.yml is in ~/syhub/config/config.yml with all required fields:
 
 wifi_ssid and wifi_password: For the WiFi access point (AP mode).
 sta_wifi_ssid and sta_wifi_password: For connecting to your router (STA mode).
 Other settings: MQTT credentials, ports, etc.
+
+Example config.yml snippet:
+project:
+  name: plantomio
+  wifi_ssid: plantomio_ap
+  wifi_password: plantomio123
+  sta_wifi_ssid: YourRouterSSID
+  sta_wifi_password: YourRouterPassword
+  mqtt:
+    username: plantomioX1
+    password: plantomioX1Pass
+    port: 1883
+    topic: v1/devices/me/telemetry
+  victoria_metrics:
+    port: 8428
+  node_red:
+    port: 1880
+  dashboard:
+    port: 5000
+  node_red_username: admin
+  node_red_password_hash: "$2b$08$W99V1mAwhUg5M9.hX6kjY.qtLHyvk1YbiXIMQ8T.xafDsGHNEa1Na"
 
 
 Generate Node-RED Password Hash:
@@ -44,10 +65,21 @@ node-red admin hash-pw YOUR_PASSWORD
 
 Update node_red_password_hash in config.yml with the output.
 
+Set Permissions:
+chmod +x ~/syhub/scripts/syhub.sh
+
+If using syhub_setup.sh, ensure it’s identical to syhub.sh:
+cp ~/syhub/scripts/syhub.sh ~/syhub/scripts/syhub_setup.sh
+chmod +x ~/syhub/scripts/syhub_setup.sh
+
+
 Run the Setup Script:
 sudo bash ~/syhub/scripts/syhub.sh setup
 
-This installs dependencies, sets up WiFi AP+STA using AP_STA_RPI_SAME_WIFI_CHIP, and configures Mosquitto, VictoriaMetrics, Node-RED, and Flask. If errors occur, check service logs (see Troubleshooting).
+Or, if using syhub_setup.sh:
+sudo bash ~/syhub/scripts/syhub_setup.sh setup
+
+This installs dependencies, sets up WiFi AP+STA using AP_STA_RPI_SAME_WIFI_CHIP, and configures Mosquitto, VictoriaMetrics, Node-RED, and Flask.
 
 Access the System:
 
@@ -83,6 +115,31 @@ WiFi: AP+STA setup optimized for Raspberry Pi 3B’s WiFi chip to avoid resource
 
 Troubleshooting
 
+YQ Errors:
+
+If you see errors like yq: error: argument files: can't open '.project.name', the yq tool is outdated or misconfigured.
+Verify yq version:yq --version
+
+Ensure it’s version 4.x (e.g., yq (https://github.com/mikefarah/yq/) version v4.35.2).
+Reinstall yq if needed:sudo wget https://github.com/mikefarah/yq/releases/download/v4.35.2/yq_linux_arm64 -O /usr/local/bin/yq
+sudo chmod +x /usr/local/bin/yq
+
+
+Check config.yml path and contents:ls -l ~/syhub/config/config.yml
+yq e '.' ~/syhub/config/config.yml
+
+
+
+
+Config File Not Found:
+
+Ensure config.yml exists in ~/syhub/config/config.yml (e.g., /home/plantomioX1/syhub/config/config.yml).
+Verify:ls -l ~/syhub/config/config.yml
+
+
+If missing, copy config.yml to the correct location and update sta_wifi_ssid, sta_wifi_password, etc.
+
+
 WiFi AP: Check journalctl -u hostapd and /tmp/AP_STA_RPI_SAME_WIFI_CHIP/install.log. Ensure devices connect to the AP (plantomio_ap by default).
 
 WiFi STA: Verify connection to your router with iwconfig wlan0 or check router logs. Ensure sta_wifi_ssid and sta_wifi_password are correct in config.yml.
@@ -111,7 +168,7 @@ Future Enhancements
 
 Add Chart.js for data visualization in the Flask dashboard.
 Implement alerting in Node-RED for threshold breaches.
-Schedule backups with cron: 0 0 * * * $HOME/syhub/scripts/syhub.sh backup.
+Schedule backups with cron: 0 0 * * * bash $HOME/syhub/scripts/syhub.sh backup.
 
 References
 
