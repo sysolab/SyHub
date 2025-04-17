@@ -61,21 +61,29 @@ config_get() {
     local key="$1"
     local default_value="${2:-}" # Optional default value
     local value
-    # Use yq to extract the value. 'e' evaluates, '.' selects the root, then navigate using the key.
-    # ' // env(DEFAULT_VALUE)' provides a fallback if the key is null or missing.
-    # Pass default via env var to handle complex default strings safely.
-    DEFAULT_VALUE="$default_value" value=$(export DEFAULT_VALUE; yq e ".$key // env(DEFAULT_VALUE)" "$CONFIG_FILE")
 
+    # Attempt to read the value using yq.
+    # -e: evaluate expression
+    # -r: output raw scalar value (removes quotes from strings etc.)
+    # Redirect stderr to /dev/null to suppress yq errors if key not found.
+    # Use '|| true' to prevent script exit via 'set -o errexit' if yq fails (e.g., key not found).
+    value=$(yq e -r ".$key" "$CONFIG_FILE" 2>/dev/null || true)
+
+    # Check if yq returned an empty string or the literal string "null"
     if [[ -z "$value" || "$value" == "null" ]]; then
-        if [[ -z "$default_value" ]]; then
-            log_message "ERROR" "Mandatory configuration key '$key' is missing or null in $CONFIG_FILE."
-            exit 1
-        else
-            # Return the default value if key was missing but default was provided
+        if [[ -n "$default_value" ]]; then
+            # A default was provided, use it
             echo "$default_value"
+            # Optional: Log that a default is being used (can be noisy)
+            # log_message "DEBUG" "Config key '$key' not found or null in '$CONFIG_FILE', using provided default."
+        else
+            # No default value was provided, and the key is missing or null.
+            # This indicates a required configuration is missing.
+            log_message "ERROR" "Mandatory configuration key '$key' is missing, null, or empty in '$CONFIG_FILE'."
+            exit 1
         fi
     else
-        # Return the extracted value
+        # Value found and is not null/empty
         echo "$value"
     fi
 }
