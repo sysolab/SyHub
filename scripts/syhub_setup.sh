@@ -30,7 +30,7 @@ install_yq() {
     if ! command -v yq &> /dev/null || ! yq --version | grep -q "mikefarah/yq"; then
         echo "Installing or updating yq (version 4.x)..."
         sudo apt update
-        wget https://github.com/mikefarah/yq/releases/download/v4.35.2/yq_linux_arm64 -O /usr/local/bin/yq || { echo "Failed to download yq"; exit 1; }
+        wget https://github.com/mikefarah/yq/releases/download/v4.45.1/yq_linux_arm64 -O /usr/local/bin/yq || { echo "Failed to download yq"; exit 1; }
         sudo chmod +x /usr/local/bin/yq
     fi
     YQ_VERSION=$(yq --version | awk '{print $NF}')
