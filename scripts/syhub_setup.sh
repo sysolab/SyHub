@@ -179,7 +179,7 @@ install_mosquitto() {
 install_victoria_metrics() {
     echo "Installing VictoriaMetrics..."
     if [ ! -f "/usr/local/bin/victoria-metrics" ]; then
-        wget https://github.com/VictoriaMetrics/VictoriaMetrics/releases/download/v1.92.0/victoria-metrics-linux-arm.tar.gz || { echo "Failed to download VictoriaMetrics"; exit 1; }
+        wget https://github.com/VictoriaMetrics/VictoriaMetrics/releases/download/v1.115.0/victoria-metrics-linux-arm64-v1.115.0.tar.gz || { echo "Failed to download VictoriaMetrics"; exit 1; }
         tar -xzf victoria-metrics-linux-arm.tar.gz
         sudo mv victoria-metrics-linux-arm/victoria-metrics /usr/local/bin/
         rm -rf victoria-metrics-linux-arm*
