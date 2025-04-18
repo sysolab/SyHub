@@ -1,70 +1,4 @@
 /**
- * Update activity log UI
- */
-function updateActivityLog() {
-    if (!elements.activityLog) return;
-    
-    // Clear placeholder if exists
-    const placeholder = elements.activityLog.querySelector('.activity-placeholder');
-    if (placeholder) {
-        elements.activityLog.innerHTML = '';
-    }
-    
-    // Check if we have activities
-    if (state.activityLog.length === 0) {
-        elements.activityLog.innerHTML = `
-            <div class="flex items-start">
-                <div class="flex-shrink-0 h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-                    </svg>
-                </div>
-                <div class="ml-3 flex-1">
-                    <p class="text-sm font-medium text-gray-400">No recent activity</p>
-                    <p class="text-sm text-gray-300">Activity will appear here</p>
-                </div>
-            </div>
-        `;
-        return;
-    }
-    
-    // Generate HTML for each activity
-    let html = '';
-    
-    state.activityLog.forEach(activity => {
-        // Determine icon based on source
-        let iconBg = 'bg-green-100';
-        let iconColor = 'text-green-500';
-        let iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" /></svg>';
-        
-        if (activity.source === 'Sensor') {
-            iconBg = 'bg-blue-100';
-            iconColor = 'text-blue-500';
-            iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M13 7H7v6h6V7z" /><path fill-rule="evenodd" d="M7 2a1 1 0 012 0v1h2V2a1 1 0 112 0v1h2a2 2 0 012 2v2h1a1 1 0 110 2h-1v2h1a1 1 0 110 2h-1v2a2 2 0 01-2 2h-2v1a1 1 0 11-2 0v-1H9v1a1 1 0 11-2 0v-1H5a2 2 0 01-2-2v-2H2a1 1 0 110-2h1V9H2a1 1 0 010-2h1V5a2 2 0 012-2h2V2zM5 5h10v10H5V5z" clip-rule="evenodd" /></svg>';
-        } else if (activity.source === 'Error') {
-            iconBg = 'bg-red-100';
-            iconColor = 'text-red-500';
-            iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>';
-        }
-        
-        html += `
-            <div class="flex items-start">
-                <div class="flex-shrink-0 h-8 w-8 rounded-full ${iconBg} flex items-center justify-center ${iconColor}">
-                    ${iconSvg}
-                </div>
-                <div class="ml-3 flex-1">
-                    <p class="text-sm font-medium text-gray-900">${activity.message}</p>
-                    <p class="text-sm text-gray-500">${activity.source} • <time datetime="${new Date(activity.timestamp).toISOString()}">${activity.time}</time></p>
-                </div>
-            </div>
-        `;
-    });
-    
-    // Update activity log
-    elements.activityLog.innerHTML = html;
-}
-
-/**
  * Update system status UI
  * @param {Object} data - System status data
  */
@@ -221,6 +155,89 @@ function initializeCharts() {
             }
         },
         'ec-chart': {
+            type: 'line',
+            options: {
+                ...JSON.parse(JSON.stringify(commonOptions)),
+                scales: {
+                    ...JSON.parse(JSON.stringify(commonOptions.scales)),
+                    y: {
+                        ...JSON.parse(JSON.stringify(commonOptions.scales.y)),
+                        min: 0,
+                        ticks: {
+                            callback: function(value) {
+                                return value + 'μS/cm';
+                            }
+                        }
+                    }
+                }
+            },
+            data: {
+                datasets: [{
+                    label: 'EC',
+                    borderColor: '#10B981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    data: []
+                }]
+            }
+        },
+        'temperature-chart': {
+            type: 'line',
+            options: {
+                ...JSON.parse(JSON.stringify(commonOptions)),
+                scales: {
+                    ...JSON.parse(JSON.stringify(commonOptions.scales)),
+                    y: {
+                        ...JSON.parse(JSON.stringify(commonOptions.scales.y)),
+                        ticks: {
+                            callback: function(value) {
+                                return value + '°C';
+                            }
+                        }
+                    }
+                }
+            },
+            data: {
+                datasets: [{
+                    label: 'Temperature',
+                    borderColor: '#F59E0B',
+                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    data: []
+                }]
+            }
+        },
+        'orp-chart': {
+            type: 'line',
+            options: {
+                ...JSON.parse(JSON.stringify(commonOptions)),
+                scales: {
+                    ...JSON.parse(JSON.stringify(commonOptions.scales)),
+                    y: {
+                        ...JSON.parse(JSON.stringify(commonOptions.scales.y)),
+                        min: 0,
+                        ticks: {
+                            callback: function(value) {
+                                return value + 'mV';
+                            }
+                        }
+                    }
+                }
+            },
+            data: {
+                datasets: [{
+                    label: 'ORP',
+                    borderColor: '#3B82F6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    data: []
+                }]
+            }
+        },
+        'tds-chart': {
             type: 'line',
             options: {
                 ...JSON.parse(JSON.stringify(commonOptions)),
@@ -469,90 +486,53 @@ if (document.readyState === 'loading') {
     });
 } else {
     console.log('Initializing Plantomio Dashboard...');
-},
+}
+
+// Add mock data for debugging if API is not available
+if (config.debug) {
+    setTimeout(() => {
+        const mockData = {
+            temperature: { value: 22.5, time: Date.now() / 1000 },
+            pH: { value: 6.2, time: Date.now() / 1000 },
+            ORP: { value: 350, time: Date.now() / 1000 },
+            TDS: { value: 250, time: Date.now() / 1000 },
+            EC: { value: 15, time: Date.now() / 1000 },
+            distance: { value: 5, time: Date.now() / 1000 },
+            deviceID: 'PI-Debug'
+        };
+        updateDashboard(mockData);
+        
+        // Log simulated activity
+        logActivity('Debug', 'Simulated data loaded for testing');
+    }, 1000);
+}.y)),
+                        min: 4,
+                        max: 9,
                         ticks: {
-                            callback: function(value) {
-                                return value + 'μS/cm';
-                            }
+                            stepSize: 0.5
                         }
                     }
                 }
             },
             data: {
                 datasets: [{
-                    label: 'EC',
-                    borderColor: '#10B981',
-                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    label: 'pH',
+                    borderColor: '#8B5CF6',
+                    backgroundColor: 'rgba(139, 92, 246, 0.1)',
                     borderWidth: 2,
                     fill: true,
                     data: []
                 }]
             }
         },
-        'temperature-chart': {
+        'ec-chart': {
             type: 'line',
             options: {
                 ...JSON.parse(JSON.stringify(commonOptions)),
                 scales: {
                     ...JSON.parse(JSON.stringify(commonOptions.scales)),
                     y: {
-                        ...JSON.parse(JSON.stringify(commonOptions.scales.y)),
-                        ticks: {
-                            callback: function(value) {
-                                return value + '°C';
-                            }
-                        }
-                    }
-                }
-            },
-            data: {
-                datasets: [{
-                    label: 'Temperature',
-                    borderColor: '#F59E0B',
-                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                    borderWidth: 2,
-                    fill: true,
-                    data: []
-                }]
-            }
-        },
-        'orp-chart': {
-            type: 'line',
-            options: {
-                ...JSON.parse(JSON.stringify(commonOptions)),
-                scales: {
-                    ...JSON.parse(JSON.stringify(commonOptions.scales)),
-                    y: {
-                        ...JSON.parse(JSON.stringify(commonOptions.scales.y)),
-                        min: 0,
-                        ticks: {
-                            callback: function(value) {
-                                return value + 'mV';
-                            }
-                        }
-                    }
-                }
-            },
-            data: {
-                datasets: [{
-                    label: 'ORP',
-                    borderColor: '#3B82F6',
-                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                    borderWidth: 2,
-                    fill: true,
-                    data: []
-                }]
-            }
-        },
-        'tds-chart': {
-            type: 'line',
-            options: {
-                ...JSON.parse(JSON.stringify(commonOptions)),
-                scales: {
-                    ...JSON.parse(JSON.stringify(commonOptions.scales)),
-                    y: {
-                        ...JSON.parse(JSON.stringify(commonOptions.scales.y)),
-                        min: 0/**
+                        ...JSON.parse(JSON.stringify(commonOptions.scales/**
  * Plantomio Dashboard - Main JavaScript
  * 
  * Optimized for resource-constrained systems like Raspberry Pi 3B
@@ -628,6 +608,269 @@ document.addEventListener('DOMContentLoaded', () => {
     // Log initialization
     logActivity('System', 'Dashboard initialized');
 });
+
+/**
+ * Cache DOM elements for better performance
+ */
+function cacheElements() {
+    // Status elements
+    elements.connectionStatus = document.getElementById('connection-status');
+    elements.deviceId = document.getElementById('device-id');
+    elements.lastUpdate = document.getElementById('last-update');
+    
+    // Navigation
+    elements.navLinks = document.querySelectorAll('.nav-link');
+    elements.sectionContainers = document.querySelectorAll('.section-container');
+    
+    // Buttons
+    elements.refreshBtn = document.getElementById('refresh-btn');
+    elements.toggleAutoUpdateBtn = document.getElementById('toggle-auto-update');
+    elements.settingsButton = document.getElementById('settings-button');
+    
+    // Modals
+    elements.settingsModal = document.getElementById('settings-modal');
+    elements.closeSettings = document.getElementById('close-settings');
+    elements.saveSettings = document.getElementById('save-settings');
+    elements.resetSettings = document.getElementById('reset-settings');
+    
+    // Settings inputs
+    elements.refreshRate = document.getElementById('refresh-rate');
+    elements.tankMin = document.getElementById('tank-min');
+    elements.tankMax = document.getElementById('tank-max');
+    elements.themeButtons = document.querySelectorAll('.theme-btn');
+    elements.temperatureUnitInputs = document.querySelectorAll('input[name="temperature-unit"]');
+    
+    // Water tank
+    elements.waterFill = document.getElementById('water-fill');
+    elements.tankLevelPercentage = document.getElementById('tank-level-percentage');
+    
+    // Alerts
+    elements.offlineAlert = document.getElementById('offline-alert');
+    
+    // Chart tabs
+    elements.timeRangeButtons = document.querySelectorAll('.time-range-btn');
+    
+    // Activity log
+    elements.activityLog = document.getElementById('activity-log');
+    
+    // Value elements - summary
+    elements.tempSummary = document.getElementById('temp-summary');
+    elements.phSummary = document.getElementById('ph-summary');
+    elements.tdsSummary = document.getElementById('tds-summary');
+    elements.ecSummary = document.getElementById('ec-summary');
+    elements.waterSummary = document.getElementById('water-summary');
+    
+    // Value elements - detailed
+    elements.temperatureValue = document.getElementById('temperature-value');
+    elements.phValue = document.getElementById('ph-value');
+    elements.orpValue = document.getElementById('orp-value');
+    elements.tdsValue = document.getElementById('tds-value');
+    elements.ecValue = document.getElementById('ec-value');
+    elements.distanceValue = document.getElementById('distance-value');
+    
+    // Status badges
+    elements.tempStatus = document.getElementById('temp-status');
+    elements.phStatus = document.getElementById('ph-status');
+    elements.tdsStatus = document.getElementById('tds-status');
+    elements.ecStatus = document.getElementById('ec-status');
+    
+    // Gauges
+    elements.temperatureGauge = document.getElementById('temperature-gauge');
+    elements.phGauge = document.getElementById('ph-gauge');
+    elements.orpGauge = document.getElementById('orp-gauge');
+    elements.tdsGauge = document.getElementById('tds-gauge');
+    elements.ecGauge = document.getElementById('ec-gauge');
+    elements.distanceGauge = document.getElementById('distance-gauge');
+    
+    // System status
+    elements.cpuGauge = document.getElementById('cpu-gauge');
+    elements.cpuValue = document.getElementById('cpu-value');
+    elements.cpuCores = document.getElementById('cpu-cores');
+    elements.memoryGauge = document.getElementById('memory-gauge');
+    elements.memoryValue = document.getElementById('memory-value');
+    elements.diskGauge = document.getElementById('disk-gauge');
+    elements.diskValue = document.getElementById('disk-value');
+    elements.networkGauge = document.getElementById('network-gauge');
+    elements.networkValue = document.getElementById('network-value');
+    
+    // Health indicators
+    elements.healthIndicator = document.getElementById('health-indicator');
+    elements.healthStatus = document.getElementById('health-status');
+    elements.overallHealthValue = document.getElementById('overall-health-value');
+    elements.overallHealthBar = document.getElementById('overall-health-bar');
+    elements.waterQualityValue = document.getElementById('water-quality-value');
+    elements.waterQualityBar = document.getElementById('water-quality-bar');
+    elements.recommendationText = document.getElementById('recommendation-text');
+}
+
+/**
+ * Load saved settings from localStorage
+ */
+function loadSettings() {
+    try {
+        const savedSettings = JSON.parse(localStorage.getItem('plantomio-settings'));
+        if (savedSettings) {
+            // Merge saved settings with defaults
+            Object.assign(config, savedSettings);
+            
+            // Apply settings to UI
+            if (elements.refreshRate) elements.refreshRate.value = config.refreshInterval / 1000;
+            if (elements.tankMin) elements.tankMin.value = config.tankMinDistance;
+            if (elements.tankMax) elements.tankMax.value = config.tankMaxDistance;
+            
+            // Apply theme
+            applyTheme(config.theme);
+            
+            // Apply temperature unit
+            const tempUnitInput = document.querySelector(`input[name="temperature-unit"][value="${config.temperatureUnit}"]`);
+            if (tempUnitInput) tempUnitInput.checked = true;
+        }
+    } catch (error) {
+        console.error('Error loading settings:', error);
+        // If error, use defaults
+    }
+}
+
+/**
+ * Set up event listeners for user interactions
+ */
+function setupEventListeners() {
+    // Refresh button
+    if (elements.refreshBtn) {
+        elements.refreshBtn.addEventListener('click', () => {
+            fetchLatestData(true);
+            elements.refreshBtn.classList.add('bg-indigo-100');
+            setTimeout(() => {
+                elements.refreshBtn.classList.remove('bg-indigo-100');
+            }, 300);
+        });
+    }
+    
+    // Auto update toggle
+    if (elements.toggleAutoUpdateBtn) {
+        elements.toggleAutoUpdateBtn.addEventListener('click', () => {
+            state.autoUpdateEnabled = !state.autoUpdateEnabled;
+            updateAutoRefreshUI();
+            
+            if (state.autoUpdateEnabled) {
+                setupAutoRefresh();
+                logActivity('System', 'Auto-update enabled');
+            } else {
+                clearAutoRefresh();
+                logActivity('System', 'Auto-update disabled');
+            }
+        });
+    }
+    
+    // Navigation links
+    elements.navLinks.forEach(link => {
+        link.addEventListener('click', (e) => {
+            const sectionId = link.getAttribute('href')?.substring(1);
+            if (sectionId) {
+                e.preventDefault();
+                navigateTo(sectionId);
+            }
+        });
+    });
+    
+    // Settings modal
+    if (elements.settingsButton) {
+        elements.settingsButton.addEventListener('click', () => {
+            elements.settingsModal.classList.remove('hidden');
+        });
+    }
+    
+    if (elements.closeSettings) {
+        elements.closeSettings.addEventListener('click', () => {
+            elements.settingsModal.classList.add('hidden');
+        });
+    }
+    
+    // Save settings
+    if (elements.saveSettings) {
+        elements.saveSettings.addEventListener('click', saveUserSettings);
+    }
+    
+    // Reset settings
+    if (elements.resetSettings) {
+        elements.resetSettings.addEventListener('click', resetUserSettings);
+    }
+    
+    // Theme buttons
+    elements.themeButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const theme = button.getAttribute('data-theme');
+            if (theme) {
+                applyTheme(theme);
+                config.theme = theme;
+                
+                // Update UI
+                elements.themeButtons.forEach(btn => {
+                    btn.classList.remove('border-white');
+                    btn.classList.add('border-transparent');
+                });
+                button.classList.remove('border-transparent');
+                button.classList.add('border-white');
+            }
+        });
+    });
+    
+    // Time range buttons for charts
+    elements.timeRangeButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const range = button.getAttribute('data-range');
+            if (range) {
+                config.chartTimeRange = range;
+                
+                // Update UI
+                elements.timeRangeButtons.forEach(btn => {
+                    btn.classList.remove('text-gray-900', 'border-b-2', 'border-green-500');
+                    btn.classList.add('text-gray-500');
+                });
+                button.classList.remove('text-gray-500');
+                button.classList.add('text-gray-900', 'border-b-2', 'border-green-500');
+                
+                // Update charts with new range
+                updateCharts();
+            }
+        });
+    });
+    
+    // Close modals when clicking outside
+    window.addEventListener('click', (e) => {
+        if (e.target === elements.settingsModal) {
+            elements.settingsModal.classList.add('hidden');
+        }
+    });
+    
+    // Handle keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        // Escape key closes modal
+        if (e.key === 'Escape') {
+            elements.settingsModal.classList.add('hidden');
+        }
+        
+        // R key to refresh
+        if (e.key === 'r' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            fetchLatestData(true);
+        }
+    });
+    
+    // Listen for service worker messages
+    if (navigator.serviceWorker) {
+        navigator.serviceWorker.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'BACKGROUND_SYNC') {
+                console.log('Background sync completed');
+                fetchLatestData();
+            }
+        });
+    }
+    
+    // Listen for online/offline events
+    window.addEventListener('online', handleOnlineStatus);
+    window.addEventListener('offline', handleOfflineStatus);
+}
 
 /**
  * Initialize UI components
@@ -1576,264 +1819,124 @@ function logDataActivity(data) {
 }
 
 /**
- * Cache DOM elements for better performance
+ * Update activity log UI
  */
-function cacheElements() {
-    // Status elements
-    elements.connectionStatus = document.getElementById('connection-status');
-    elements.deviceId = document.getElementById('device-id');
-    elements.lastUpdate = document.getElementById('last-update');
+function updateActivityLog() {
+    if (!elements.activityLog) return;
     
-    // Navigation
-    elements.navLinks = document.querySelectorAll('.nav-link');
-    elements.sectionContainers = document.querySelectorAll('.section-container');
-    
-    // Buttons
-    elements.refreshBtn = document.getElementById('refresh-btn');
-    elements.toggleAutoUpdateBtn = document.getElementById('toggle-auto-update');
-    elements.settingsButton = document.getElementById('settings-button');
-    
-    // Modals
-    elements.settingsModal = document.getElementById('settings-modal');
-    elements.closeSettings = document.getElementById('close-settings');
-    elements.saveSettings = document.getElementById('save-settings');
-    elements.resetSettings = document.getElementById('reset-settings');
-    
-    // Settings inputs
-    elements.refreshRate = document.getElementById('refresh-rate');
-    elements.tankMin = document.getElementById('tank-min');
-    elements.tankMax = document.getElementById('tank-max');
-    elements.themeButtons = document.querySelectorAll('.theme-btn');
-    elements.temperatureUnitInputs = document.querySelectorAll('input[name="temperature-unit"]');
-    
-    // Water tank
-    elements.waterFill = document.getElementById('water-fill');
-    elements.tankLevelPercentage = document.getElementById('tank-level-percentage');
-    
-    // Alerts
-    elements.offlineAlert = document.getElementById('offline-alert');
-    
-    // Chart tabs
-    elements.timeRangeButtons = document.querySelectorAll('.time-range-btn');
-    
-    // Activity log
-    elements.activityLog = document.getElementById('activity-log');
-    
-    // Value elements - summary
-    elements.tempSummary = document.getElementById('temp-summary');
-    elements.phSummary = document.getElementById('ph-summary');
-    elements.tdsSummary = document.getElementById('tds-summary');
-    elements.ecSummary = document.getElementById('ec-summary');
-    elements.waterSummary = document.getElementById('water-summary');
-    
-    // Value elements - detailed
-    elements.temperatureValue = document.getElementById('temperature-value');
-    elements.phValue = document.getElementById('ph-value');
-    elements.orpValue = document.getElementById('orp-value');
-    elements.tdsValue = document.getElementById('tds-value');
-    elements.ecValue = document.getElementById('ec-value');
-    elements.distanceValue = document.getElementById('distance-value');
-    
-    // Status badges
-    elements.tempStatus = document.getElementById('temp-status');
-    elements.phStatus = document.getElementById('ph-status');
-    elements.tdsStatus = document.getElementById('tds-status');
-    elements.ecStatus = document.getElementById('ec-status');
-    
-    // Gauges
-    elements.temperatureGauge = document.getElementById('temperature-gauge');
-    elements.phGauge = document.getElementById('ph-gauge');
-    elements.orpGauge = document.getElementById('orp-gauge');
-    elements.tdsGauge = document.getElementById('tds-gauge');
-    elements.ecGauge = document.getElementById('ec-gauge');
-    elements.distanceGauge = document.getElementById('distance-gauge');
-    
-    // System status
-    elements.cpuGauge = document.getElementById('cpu-gauge');
-    elements.cpuValue = document.getElementById('cpu-value');
-    elements.cpuCores = document.getElementById('cpu-cores');
-    elements.memoryGauge = document.getElementById('memory-gauge');
-    elements.memoryValue = document.getElementById('memory-value');
-    elements.diskGauge = document.getElementById('disk-gauge');
-    elements.diskValue = document.getElementById('disk-value');
-    elements.networkGauge = document.getElementById('network-gauge');
-    elements.networkValue = document.getElementById('network-value');
-    
-    // Health indicators
-    elements.healthIndicator = document.getElementById('health-indicator');
-    elements.healthStatus = document.getElementById('health-status');
-    elements.overallHealthValue = document.getElementById('overall-health-value');
-    elements.overallHealthBar = document.getElementById('overall-health-bar');
-    elements.waterQualityValue = document.getElementById('water-quality-value');
-    elements.waterQualityBar = document.getElementById('water-quality-bar');
-    elements.recommendationText = document.getElementById('recommendation-text');
-}
-
-/**
- * Load saved settings from localStorage
- */
-function loadSettings() {
-    try {
-        const savedSettings = JSON.parse(localStorage.getItem('plantomio-settings'));
-        if (savedSettings) {
-            // Merge saved settings with defaults
-            Object.assign(config, savedSettings);
-            
-            // Apply settings to UI
-            if (elements.refreshRate) elements.refreshRate.value = config.refreshInterval / 1000;
-            if (elements.tankMin) elements.tankMin.value = config.tankMinDistance;
-            if (elements.tankMax) elements.tankMax.value = config.tankMaxDistance;
-            
-            // Apply theme
-            applyTheme(config.theme);
-            
-            // Apply temperature unit
-            const tempUnitInput = document.querySelector(`input[name="temperature-unit"][value="${config.temperatureUnit}"]`);
-            if (tempUnitInput) tempUnitInput.checked = true;
-        }
-    } catch (error) {
-        console.error('Error loading settings:', error);
-        // If error, use defaults
-    }
-}
-
-/**
- * Set up event listeners for user interactions
- */
-function setupEventListeners() {
-    // Refresh button
-    if (elements.refreshBtn) {
-        elements.refreshBtn.addEventListener('click', () => {
-            fetchLatestData(true);
-            elements.refreshBtn.classList.add('bg-indigo-100');
-            setTimeout(() => {
-                elements.refreshBtn.classList.remove('bg-indigo-100');
-            }, 300);
-        });
+    // Clear placeholder if exists
+    const placeholder = elements.activityLog.querySelector('.activity-placeholder');
+    if (placeholder) {
+        elements.activityLog.innerHTML = '';
     }
     
-    // Auto update toggle
-    if (elements.toggleAutoUpdateBtn) {
-        elements.toggleAutoUpdateBtn.addEventListener('click', () => {
-            state.autoUpdateEnabled = !state.autoUpdateEnabled;
-            updateAutoRefreshUI();
-            
-            if (state.autoUpdateEnabled) {
-                setupAutoRefresh();
-                logActivity('System', 'Auto-update enabled');
-            } else {
-                clearAutoRefresh();
-                logActivity('System', 'Auto-update disabled');
-            }
-        });
+    // Check if we have activities
+    if (state.activityLog.length === 0) {
+        elements.activityLog.innerHTML = `
+            <div class="flex items-start">
+                <div class="flex-shrink-0 h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                    </svg>
+                </div>
+                <div class="ml-3 flex-1">
+                    <p class="text-sm font-medium text-gray-400">No recent activity</p>
+                    <p class="text-sm text-gray-300">Activity will appear here</p>
+                </div>
+            </div>
+        `;
+        return;
     }
     
-    // Navigation links
-    elements.navLinks.forEach(link => {
-        link.addEventListener('click', (e) => {
-            const sectionId = link.getAttribute('href')?.substring(1);
-            if (sectionId) {
-                e.preventDefault();
-                navigateTo(sectionId);
-            }
-        });
-    });
+    // Generate HTML for each activity
+    let html = '';
     
-    // Settings modal
-    if (elements.settingsButton) {
-        elements.settingsButton.addEventListener('click', () => {
-            elements.settingsModal.classList.remove('hidden');
-        });
-    }
-    
-    if (elements.closeSettings) {
-        elements.closeSettings.addEventListener('click', () => {
-            elements.settingsModal.classList.add('hidden');
-        });
-    }
-    
-    // Save settings
-    if (elements.saveSettings) {
-        elements.saveSettings.addEventListener('click', saveUserSettings);
-    }
-    
-    // Reset settings
-    if (elements.resetSettings) {
-        elements.resetSettings.addEventListener('click', resetUserSettings);
-    }
-    
-    // Theme buttons
-    elements.themeButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            const theme = button.getAttribute('data-theme');
-            if (theme) {
-                applyTheme(theme);
-                config.theme = theme;
-                
-                // Update UI
-                elements.themeButtons.forEach(btn => {
-                    btn.classList.remove('border-white');
-                    btn.classList.add('border-transparent');
-                });
-                button.classList.remove('border-transparent');
-                button.classList.add('border-white');
-            }
-        });
-    });
-    
-    // Time range buttons for charts
-    elements.timeRangeButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            const range = button.getAttribute('data-range');
-            if (range) {
-                config.chartTimeRange = range;
-                
-                // Update UI
-                elements.timeRangeButtons.forEach(btn => {
-                    btn.classList.remove('text-gray-900', 'border-b-2', 'border-green-500');
-                    btn.classList.add('text-gray-500');
-                });
-                button.classList.remove('text-gray-500');
-                button.classList.add('text-gray-900', 'border-b-2', 'border-green-500');
-                
-                // Update charts with new range
-                updateCharts();
-            }
-        });
-    });
-    
-    // Close modals when clicking outside
-    window.addEventListener('click', (e) => {
-        if (e.target === elements.settingsModal) {
-            elements.settingsModal.classList.add('hidden');
-        }
-    });
-    
-    // Handle keyboard shortcuts
-    document.addEventListener('keydown', (e) => {
-        // Escape key closes modal
-        if (e.key === 'Escape') {
-            elements.settingsModal.classList.add('hidden');
+    state.activityLog.forEach(activity => {
+        // Determine icon based on source
+        let iconBg = 'bg-green-100';
+        let iconColor = 'text-green-500';
+        let iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" /></svg>';
+        
+        if (activity.source === 'Sensor') {
+            iconBg = 'bg-blue-100';
+            iconColor = 'text-blue-500';
+            iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M13 7H7v6h6V7z" /><path fill-rule="evenodd" d="M7 2a1 1 0 012 0v1h2V2a1 1 0 112 0v1h2a2 2 0 012 2v2h1a1 1 0 110 2h-1v2h1a1 1 0 110 2h-1v2a2 2 0 01-2 2h-2v1a1 1 0 11-2 0v-1H9v1a1 1 0 11-2 0v-1H5a2 2 0 01-2-2v-2H2a1 1 0 110-2h1V9H2a1 1 0 010-2h1V5a2 2 0 012-2h2V2zM5 5h10v10H5V5z" clip-rule="evenodd" /></svg>';
+        } else if (activity.source === 'Error') {
+            iconBg = 'bg-red-100';
+            iconColor = 'text-red-500';
+            iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>';
         }
         
-        // R key to refresh
-        if (e.key === 'r' && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault();
-            fetchLatestData(true);
-        }
+        html += `
+            <div class="flex items-start">
+                <div class="flex-shrink-0 h-8 w-8 rounded-full ${iconBg} flex items-center justify-center ${iconColor}">
+                    ${iconSvg}
+                </div>
+                <div class="ml-3 flex-1">
+                    <p class="text-sm font-medium text-gray-900">${activity.message}</p>
+                    <p class="text-sm text-gray-500">${activity.source} • <time datetime="${new Date(activity.timestamp).toISOString()}">${activity.time}</time></p>
+                </div>
+            </div>
+        `;
     });
     
-    // Listen for service worker messages
-    if (navigator.serviceWorker) {
-        navigator.serviceWorker.addEventListener('message', (event) => {
-            if (event.data && event.data.type === 'BACKGROUND_SYNC') {
-                console.log('Background sync completed');
-                fetchLatestData();
-            }
-        });
+    // Update activity log
+    elements.activityLog.innerHTML = html;
+}
+
+/**
+ * Update system status UI
+ * @param {Object} data - System status data
+ */
+function updateSystemStatus(data) {
+    if (!data) return;
+    
+    // Update CPU usage
+    if (data.cpu) {
+        if (elements.cpuGauge) elements.cpuGauge.style.width = `${data.cpu.percent}%`;
+        if (elements.cpuValue) elements.cpuValue.textContent = `${data.cpu.percent}%`;
+        if (elements.cpuCores) elements.cpuCores.textContent = `${data.cpu.cores} cores`;
     }
     
-    // Listen for online/offline events
-    window.addEventListener('online', handleOnlineStatus);
-    window.addEventListener('offline', handleOfflineStatus);
+    // Update memory usage
+    if (data.memory) {
+        if (elements.memoryGauge) elements.memoryGauge.style.width = `${data.memory.percent}%`;
+        if (elements.memoryValue) elements.memoryValue.textContent = `${data.memory.percent}%`;
+    }
+    
+    // Update disk usage
+    if (data.disk) {
+        if (elements.diskGauge) elements.diskGauge.style.width = `${data.disk.percent}%`;
+        if (elements.diskValue) elements.diskValue.textContent = `${data.disk.percent}%`;
+    }
+    
+    // Update network usage
+    if (data.network) {
+        if (elements.networkGauge) elements.networkGauge.style.width = `${data.network.percent}%`;
+        if (elements.networkValue) elements.networkValue.textContent = `${data.network.percent}%`;
+    }
+    
+    // Update other system info if available
+    if (data.uptime) {
+        const uptimeElement = document.getElementById('uptime');
+        if (uptimeElement) uptimeElement.textContent = data.uptime;
+    }
+    
+    if (data.lastBoot) {
+        const lastBootElement = document.getElementById('last-boot');
+        if (lastBootElement) lastBootElement.textContent = data.lastBoot;
+    }
+    
+    if (data.os) {
+        const osInfoElement = document.getElementById('os-info');
+        if (osInfoElement) osInfoElement.textContent = data.os;
+    }
 }
+}
+}
+}
+}
+/**
+ * Apply theme colors based on user preference
+ * @param {string} theme - Theme name
+ */
