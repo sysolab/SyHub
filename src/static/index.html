@@ -2,271 +2,209 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#10B981">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Plantomio IoT Dashboard</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-adapter-date-fns/2.0.0/chartjs-adapter-date-fns.min.js"></script>
-    <style>
-        body {
-            font-family: 'Inter', system-ui, -apple-system, sans-serif;
-            background-color: #F9FAFB;
-        }
-        .card {
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            transition: all 0.2s ease;
-        }
-        .card:hover {
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            transform: translateY(-2px);
-        }
-        .sidebar {
-            background: linear-gradient(180deg, #2D3748 0%, #1A202C 100%);
-        }
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-            gap: 12px;
-        }
-        .highlight {
-            position: relative;
-        }
-        .highlight:after {
-            content: '';
-            position: absolute;
-            width: 100%;
-            transform: scaleX(0);
-            height: 2px;
-            bottom: -4px;
-            left: 0;
-            background-color: #48BB78;
-            transform-origin: bottom right;
-            transition: transform 0.3s ease-out;
-        }
-        .highlight.active:after {
-            transform: scaleX(1);
-            transform-origin: bottom left;
-        }
-        .chart-container {
-            height: 240px;
-            position: relative;
-        }
-        .metric-value {
-            font-variant-numeric: tabular-nums;
-        }
-        .progress-bar {
-            height: 6px;
-            border-radius: 3px;
-            overflow: hidden;
-        }
-        .progress-value {
-            height: 100%;
-            background: linear-gradient(90deg, #10B981 0%, #48BB78 100%);
-        }
-        .pulse {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #48BB78;
-            margin-right: 6px;
-            position: relative;
-        }
-        .pulse:before {
-            content: '';
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            background-color: #48BB78;
-            opacity: 0.7;
-            animation: pulse 2s infinite;
-        }
-        @keyframes pulse {
-            0% {
-                transform: scale(1);
-                opacity: 0.7;
-            }
-            70% {
-                transform: scale(2.5);
-                opacity: 0;
-            }
-            100% {
-                transform: scale(2.5);
-                opacity: 0;
-            }
-        }
-        @media (max-width: 768px) {
-            .sidebar {
-                width: 60px !important;
-            }
-            .metrics-grid {
-                grid-template-columns: repeat(auto-fill, minmax(100%, 1fr));
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-adapter-date-fns/2.0.0/chartjs-adapter-date-fns.min.js" defer></script>
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="icon" type="image/png" href="/static/images/icon-192.png">
+    <link rel="apple-touch-icon" href="/static/images/icon-192.png">
 </head>
-<body class="flex min-h-screen">
+<body class="bg-gray-50 min-h-screen flex flex-col md:flex-row">
     <!-- Sidebar -->
-    <div class="sidebar text-white w-16 flex flex-col items-center py-6 space-y-8">
-        <div class="text-2xl font-bold">🌱</div>
-        <nav class="flex flex-col items-center space-y-6 text-gray-400">
-            <a href="#" class="p-2 rounded-lg text-white bg-gray-700"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg></a>
-            <a href="#" class="p-2 rounded-lg hover:bg-gray-700"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg></a>
-            <a href="#" class="p-2 rounded-lg hover:bg-gray-700"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></a>
-        </nav>
-        <div class="mt-auto">
-            <a href="#" class="p-2 rounded-lg hover:bg-gray-700"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg></a>
+    <nav class="sidebar text-white w-full md:w-16 h-16 md:min-h-screen flex md:flex-col items-center justify-between p-4 md:py-6 md:px-0 transition-all">
+        <div class="flex md:flex-col items-center md:space-y-6 space-x-4 md:space-x-0">
+            <div class="text-2xl font-bold flex justify-center w-full">🌱</div>
+            <div class="flex md:flex-col items-center md:space-y-6 space-x-4 md:space-x-0">
+                <a href="#dashboard-section" class="nav-link p-2 rounded-lg text-white bg-gray-700 flex justify-center" aria-label="Dashboard">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                    </svg>
+                </a>
+                <a href="#charts-section" class="nav-link p-2 rounded-lg hover:bg-gray-700 flex justify-center" aria-label="Charts">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                </a>
+                <a href="#system-status" class="nav-link p-2 rounded-lg hover:bg-gray-700 flex justify-center" aria-label="System">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                    </svg>
+                </a>
+                <a href="#" class="nav-link p-2 rounded-lg hover:bg-gray-700 flex justify-center" id="settings-button" aria-label="Settings">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    </svg>
+                </a>
+            </div>
         </div>
-    </div>
+        <div class="md:flex justify-center hidden">
+            <a href="#" class="p-2 rounded-lg hover:bg-gray-700 flex justify-center" aria-label="Logout">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+            </a>
+        </div>
+    </nav>
 
     <!-- Main Content -->
-    <div class="flex-1 p-4 md:p-8">
-        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-            <div>
-                <h1 class="text-2xl font-bold text-gray-800">Plantomio Dashboard</h1>
-                <p class="text-gray-500">Plant monitoring system</p>
-            </div>
-            <div class="flex flex-wrap items-center space-x-2 mt-2 md:mt-0">
-                <div class="text-sm text-gray-600 bg-white rounded-lg px-3 py-1 shadow mb-2 md:mb-0">
-                    <span class="pulse"></span>Live Data
+    <main class="flex-1 p-4 overflow-auto">
+        <header class="mb-6">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-800">Plantomio Dashboard</h1>
+                    <p class="text-gray-500">Plant monitoring system</p>
                 </div>
-                <div class="text-sm text-gray-600 bg-white rounded-lg px-3 py-1 shadow mb-2 md:mb-0" id="device-id"></div>
-                <div class="text-sm text-gray-600 bg-white rounded-lg px-3 py-1 shadow mb-2 md:mb-0" id="last-update"></div>
+                <div class="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
+                    <div class="text-sm text-gray-600 bg-white rounded-lg px-3 py-1 shadow flex items-center" id="connection-status">
+                        <span class="pulse mr-1.5"></span>Live Data
+                    </div>
+                    <div class="text-sm text-gray-600 bg-white rounded-lg px-3 py-1 shadow" id="device-id">Device: --</div>
+                    <div class="text-sm text-gray-600 bg-white rounded-lg px-3 py-1 shadow" id="last-update">Updated: --</div>
+                </div>
             </div>
         </header>
 
-        <!-- Plant Health Assessment - Now at the top 1/3 of the page -->
-        <div class="card p-4 md:p-6 mb-6">
-            <div class="flex flex-col md:flex-row items-start md:items-center justify-between mb-4">
-                <h2 class="text-lg font-semibold text-gray-700">Plant Health Assessment</h2>
-                <div class="flex mt-2 md:mt-0">
-                    <button id="refresh-btn" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium py-1 px-3 rounded text-sm mr-2">
-                        Refresh Data
-                    </button>
-                    <button class="bg-green-50 hover:bg-green-100 text-green-700 font-medium py-1 px-3 rounded text-sm">
-                        Actions
-                    </button>
-                </div>
-            </div>
-            
-            <div class="flex flex-col md:flex-row">
-                <!-- Health Summary -->
-                <div class="md:w-1/3 pr-0 md:pr-4 mb-4 md:mb-0">
-                    <div class="flex items-center mb-4">
-                        <div class="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center text-green-500 mr-4">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                            </svg>
-                        </div>
-                        <div>
-                            <h3 class="text-xl font-bold text-gray-900">Good Condition</h3>
-                            <p class="text-gray-500">Based on sensor readings</p>
-                        </div>
-                    </div>
-                    <div class="space-y-3">
-                        <div>
-                            <div class="flex justify-between text-sm mb-1">
-                                <span class="font-medium text-gray-700">Overall Health</span>
-                                <span class="text-green-600 font-medium">86%</span>
-                            </div>
-                            <div class="progress-bar bg-gray-100">
-                                <div class="progress-value" style="width: 86%"></div>
-                            </div>
-                        </div>
-                        <div>
-                            <div class="flex justify-between text-sm mb-1">
-                                <span class="font-medium text-gray-700">Water Quality</span>
-                                <span class="text-yellow-600 font-medium">62%</span>
-                            </div>
-                            <div class="progress-bar bg-gray-100">
-                                <div class="progress-value" style="width: 62%; background: linear-gradient(90deg, #F59E0B 0%, #FBBF24 100%);"></div>
-                            </div>
-                        </div>
-                        <div>
-                            <div class="flex justify-between text-sm mb-1">
-                                <span class="font-medium text-gray-700">Growth Rate</span>
-                                <span class="text-green-600 font-medium">78%</span>
-                            </div>
-                            <div class="progress-bar bg-gray-100">
-                                <div class="progress-value" style="width: 78%"></div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="mt-4 p-3 bg-blue-50 rounded-lg">
-                        <h4 class="text-sm font-medium text-blue-800 mb-1">Recommendation</h4>
-                        <p class="text-sm text-blue-600">Consider reducing nutrient solution concentration. TDS levels are above optimal range for this plant type.</p>
-                    </div>
-                </div>
-                
-                <!-- Critical Metrics Summary -->
-                <div class="md:w-2/3">
-                    <div class="mb-3">
-                        <h3 class="text-md font-medium text-gray-700 mb-2">Critical Metrics</h3>
-                        <div class="grid grid-cols-3 gap-3">
-                            <div class="bg-gray-50 p-3 rounded-lg">
-                                <div class="flex justify-between items-start">
-                                    <p class="text-xs text-gray-500">Temperature</p>
-                                    <span class="bg-green-100 text-green-800 text-xs px-1.5 py-0.5 rounded">Ok</span>
-                                </div>
-                                <p class="text-lg font-bold mt-1" id="temp-summary">--°C</p>
-                            </div>
-                            <div class="bg-gray-50 p-3 rounded-lg">
-                                <div class="flex justify-between items-start">
-                                    <p class="text-xs text-gray-500">TDS</p>
-                                    <span class="bg-red-100 text-red-800 text-xs px-1.5 py-0.5 rounded">High</span>
-                                </div>
-                                <p class="text-lg font-bold mt-1" id="tds-summary">--ppm</p>
-                            </div>
-                            <div class="bg-gray-50 p-3 rounded-lg">
-                                <div class="flex justify-between items-start">
-                                    <p class="text-xs text-gray-500">pH</p>
-                                    <span class="bg-yellow-100 text-yellow-800 text-xs px-1.5 py-0.5 rounded">High</span>
-                                </div>
-                                <p class="text-lg font-bold mt-1" id="ph-summary">--</p>
-                            </div>
+        <!-- Dashboard Section -->
+        <section id="dashboard-section" class="section-container">
+            <!-- Plant Health Assessment Section -->
+            <div class="bg-white rounded-xl shadow mb-6 overflow-hidden">
+                <div class="p-4 sm:p-6">
+                    <div class="flex flex-col sm:flex-row justify-between items-start mb-4">
+                        <h2 class="text-lg font-semibold text-gray-700">Plant Health Assessment</h2>
+                        <div class="flex mt-2 sm:mt-0">
+                            <button id="refresh-btn" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium py-1 px-3 rounded text-sm mr-2 transition">
+                                <span class="hidden sm:inline">Refresh Data</span>
+                                <span class="sm:hidden">Refresh</span>
+                            </button>
+                            <button id="toggle-auto-update" class="bg-green-50 hover:bg-green-100 text-green-700 font-medium py-1 px-3 rounded text-sm transition">
+                                <span class="auto-update-status">Auto Update: ON</span>
+                            </button>
                         </div>
                     </div>
                     
-                    <!-- System Status -->
-                    <div>
-                        <h3 class="text-md font-medium text-gray-700 mb-2">System Status</h3>
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            <div class="bg-gray-50 p-3 rounded-lg">
-                                <p class="text-xs text-gray-500">CPU Load</p>
-                                <div class="flex items-end justify-between">
-                                    <p class="text-lg font-bold">32%</p>
-                                    <div class="w-16 h-4 bg-gray-200 rounded overflow-hidden">
-                                        <div class="h-full bg-green-500" style="width: 32%"></div>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <!-- Health Summary -->
+                        <div class="col-span-1">
+                            <div class="flex items-center mb-4">
+                                <div id="health-indicator" class="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center text-green-500 mr-4 flex-shrink-0">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 id="health-status" class="text-xl font-bold text-gray-900">Good Condition</h3>
+                                    <p class="text-gray-500">Based on sensor readings</p>
+                                </div>
+                            </div>
+                            <div class="space-y-3">
+                                <div>
+                                    <div class="flex justify-between text-sm mb-1">
+                                        <span class="font-medium text-gray-700">Overall Health</span>
+                                        <span id="overall-health-value" class="text-green-600 font-medium">--%</span>
+                                    </div>
+                                    <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                        <div id="overall-health-bar" class="h-full bg-gradient-to-r from-green-400 to-green-500" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-sm mb-1">
+                                        <span class="font-medium text-gray-700">Water Quality</span>
+                                        <span id="water-quality-value" class="text-yellow-600 font-medium">--%</span>
+                                    </div>
+                                    <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                        <div id="water-quality-bar" class="h-full bg-gradient-to-r from-yellow-400 to-yellow-500" style="width: 0%"></div>
                                     </div>
                                 </div>
                             </div>
-                            <div class="bg-gray-50 p-3 rounded-lg">
-                                <p class="text-xs text-gray-500">Memory</p>
-                                <div class="flex items-end justify-between">
-                                    <p class="text-lg font-bold">45%</p>
-                                    <div class="w-16 h-4 bg-gray-200 rounded overflow-hidden">
-                                        <div class="h-full bg-green-500" style="width: 45%"></div>
+                            <div id="recommendation-box" class="mt-4 p-3 bg-blue-50 rounded-lg">
+                                <h4 class="text-sm font-medium text-blue-800 mb-1">Recommendation</h4>
+                                <p id="recommendation-text" class="text-sm text-blue-600">Loading recommendations...</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Critical Metrics Summary -->
+                        <div class="col-span-1">
+                            <div class="mb-3">
+                                <h3 class="text-md font-medium text-gray-700 mb-2">Critical Metrics</h3>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div class="bg-gray-50 p-3 rounded-lg">
+                                        <div class="flex justify-between items-start">
+                                            <p class="text-xs text-gray-500">Temperature</p>
+                                            <span id="temp-status" class="status-badge bg-gray-100 text-gray-800 text-xs px-1.5 py-0.5 rounded">--</span>
+                                        </div>
+                                        <p class="text-lg font-bold mt-1" id="temp-summary">--°C</p>
+                                    </div>
+                                    <div class="bg-gray-50 p-3 rounded-lg">
+                                        <div class="flex justify-between items-start">
+                                            <p class="text-xs text-gray-500">pH Level</p>
+                                            <span id="ph-status" class="status-badge bg-gray-100 text-gray-800 text-xs px-1.5 py-0.5 rounded">--</span>
+                                        </div>
+                                        <p class="text-lg font-bold mt-1" id="ph-summary">--</p>
+                                    </div>
+                                    <div class="bg-gray-50 p-3 rounded-lg">
+                                        <div class="flex justify-between items-start">
+                                            <p class="text-xs text-gray-500">TDS</p>
+                                            <span id="tds-status" class="status-badge bg-gray-100 text-gray-800 text-xs px-1.5 py-0.5 rounded">--</span>
+                                        </div>
+                                        <p class="text-lg font-bold mt-1" id="tds-summary">--ppm</p>
+                                    </div>
+                                    <div class="bg-gray-50 p-3 rounded-lg">
+                                        <div class="flex justify-between items-start">
+                                            <p class="text-xs text-gray-500">EC</p>
+                                            <span id="ec-status" class="status-badge bg-gray-100 text-gray-800 text-xs px-1.5 py-0.5 rounded">--</span>
+                                        </div>
+                                        <p class="text-lg font-bold mt-1" id="ec-summary">--μS/cm</p>
                                     </div>
                                 </div>
                             </div>
-                            <div class="bg-gray-50 p-3 rounded-lg">
-                                <p class="text-xs text-gray-500">Storage</p>
-                                <div class="flex items-end justify-between">
-                                    <p class="text-lg font-bold">18%</p>
-                                    <div class="w-16 h-4 bg-gray-200 rounded overflow-hidden">
-                                        <div class="h-full bg-green-500" style="width: 18%"></div>
-                                    </div>
+                        </div>
+                        
+                        <!-- Water Tank Visualization -->
+                        <div class="col-span-1">
+                            <h3 class="text-md font-medium text-gray-700 mb-2">Water Tank</h3>
+                            <div class="flex items-center">
+                                <div class="water-tank-container">
+                                    <svg viewBox="0 0 100 160" class="w-20 h-32">
+                                        <!-- Tank outline -->
+                                        <rect x="10" y="10" width="80" height="140" rx="5" fill="none" stroke="#CBD5E0" stroke-width="2"/>
+                                        
+                                        <!-- Water fill - will be animated with JS -->
+                                        <rect id="water-fill" x="10" y="150" width="80" height="0" fill="url(#water-gradient)" class="water-fill-rect">
+                                        </rect>
+                                        
+                                        <!-- Measurement lines -->
+                                        <line x1="5" y1="30" x2="15" y2="30" stroke="#CBD5E0" stroke-width="1"/>
+                                        <text x="20" y="34" font-size="10" fill="#718096">100%</text>
+                                        
+                                        <line x1="5" y1="90" x2="15" y2="90" stroke="#CBD5E0" stroke-width="1"/>
+                                        <text x="20" y="94" font-size="10" fill="#718096">50%</text>
+                                        
+                                        <line x1="5" y1="150" x2="15" y2="150" stroke="#CBD5E0" stroke-width="1"/>
+                                        <text x="20" y="154" font-size="10" fill="#718096">0%</text>
+                                        
+                                        <!-- Water gradient definition -->
+                                        <defs>
+                                            <linearGradient id="water-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                                <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.8"/>
+                                                <stop offset="100%" stop-color="#60A5FA" stop-opacity="0.9"/>
+                                            </linearGradient>
+                                        </defs>
+                                    </svg>
                                 </div>
-                            </div>
-                            <div class="bg-gray-50 p-3 rounded-lg">
-                                <p class="text-xs text-gray-500">Water Level</p>
-                                <div class="flex items-end justify-between">
-                                    <p class="text-lg font-bold" id="water-summary">--cm</p>
-                                    <div class="w-16 h-4 bg-gray-200 rounded overflow-hidden">
-                                        <div class="h-full bg-blue-500" id="water-level-indicator" style="width: 0%"></div>
+                                
+                                <div class="ml-4">
+                                    <div class="mb-2">
+                                        <div class="text-sm text-gray-500">Current Level</div>
+                                        <div class="text-xl font-bold" id="tank-level-percentage">--%</div>
+                                    </div>
+                                    <div>
+                                        <div class="text-sm text-gray-500">Distance</div>
+                                        <div class="text-xl font-bold" id="water-summary">--cm</div>
                                     </div>
                                 </div>
                             </div>
@@ -274,600 +212,389 @@
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Metrics Cards - More compact now -->
-        <h3 class="text-lg font-semibold text-gray-700 mb-2">Detailed Metrics</h3>
-        <div class="metrics-grid mb-6">
-            <div class="card p-3" id="temperature-card">
-                <div class="flex justify-between items-start mb-2">
-                    <h3 class="text-gray-500 text-sm font-medium">Temperature</h3>
-                    <span class="bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded">Normal</span>
-                </div>
-                <div class="flex items-baseline">
-                    <span class="text-xl font-bold metric-value" id="temperature-value">--</span>
-                    <span class="text-gray-500 ml-1">°C</span>
-                </div>
-                <div class="mt-2">
-                    <div class="progress-bar bg-gray-100">
-                        <div class="progress-value" style="width: 60%"></div>
+            <!-- Detailed Metrics Grid -->
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold text-gray-700 mb-4">Detailed Metrics</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div class="bg-white rounded-lg shadow p-4" id="temperature-card">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="text-gray-500 text-sm font-medium">Temperature</h3>
+                            <span class="status-badge bg-gray-100 text-gray-800 text-xs px-2 py-0.5 rounded">--</span>
+                        </div>
+                        <div class="flex items-baseline">
+                            <span class="text-xl font-bold" id="temperature-value">--</span>
+                            <span class="text-gray-500 ml-1">°C</span>
+                        </div>
+                        <div class="mt-2">
+                            <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                <div id="temperature-gauge" class="h-full bg-gradient-to-r from-green-400 to-green-500" style="width: 0%"></div>
+                            </div>
+                            <div class="flex justify-between text-xs text-gray-500 mt-1">
+                                <span>15°C</span>
+                                <span>21°C</span>
+                                <span>30°C</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="flex justify-between text-xs text-gray-500 mt-1">
-                        <span>15°C</span>
-                        <span>21°C</span>
-                        <span>30°C</span>
+
+                    <div class="bg-white rounded-lg shadow p-4" id="ph-card">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="text-gray-500 text-sm font-medium">pH Level</h3>
+                            <span class="status-badge bg-gray-100 text-gray-800 text-xs px-2 py-0.5 rounded">--</span>
+                        </div>
+                        <div class="flex items-baseline">
+                            <span class="text-xl font-bold" id="ph-value">--</span>
+                            <span class="text-gray-500 ml-1">pH</span>
+                        </div>
+                        <div class="mt-2">
+                            <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                <div id="ph-gauge" class="h-full bg-gradient-to-r from-green-400 to-green-500" style="width: 0%"></div>
+                            </div>
+                            <div class="flex justify-between text-xs text-gray-500 mt-1">
+                                <span>5.5</span>
+                                <span>7.0</span>
+                                <span>8.5</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-lg shadow p-4" id="orp-card">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="text-gray-500 text-sm font-medium">ORP</h3>
+                            <span class="status-badge bg-gray-100 text-gray-800 text-xs px-2 py-0.5 rounded">--</span>
+                        </div>
+                        <div class="flex items-baseline">
+                            <span class="text-xl font-bold" id="orp-value">--</span>
+                            <span class="text-gray-500 ml-1">mV</span>
+                        </div>
+                        <div class="mt-2">
+                            <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                <div id="orp-gauge" class="h-full bg-gradient-to-r from-green-400 to-green-500" style="width: 0%"></div>
+                            </div>
+                            <div class="flex justify-between text-xs text-gray-500 mt-1">
+                                <span>150</span>
+                                <span>350</span>
+                                <span>600</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-lg shadow p-4" id="tds-card">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="text-gray-500 text-sm font-medium">TDS</h3>
+                            <span class="status-badge bg-gray-100 text-gray-800 text-xs px-2 py-0.5 rounded">--</span>
+                        </div>
+                        <div class="flex items-baseline">
+                            <span class="text-xl font-bold" id="tds-value">--</span>
+                            <span class="text-gray-500 ml-1">ppm</span>
+                        </div>
+                        <div class="mt-2">
+                            <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                <div id="tds-gauge" class="h-full bg-gradient-to-r from-green-400 to-green-500" style="width: 0%"></div>
+                            </div>
+                            <div class="flex justify-between text-xs text-gray-500 mt-1">
+                                <span>50</span>
+                                <span>250</span>
+                                <span>500</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-lg shadow p-4" id="ec-card">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="text-gray-500 text-sm font-medium">Conductivity</h3>
+                            <span class="status-badge bg-gray-100 text-gray-800 text-xs px-2 py-0.5 rounded">--</span>
+                        </div>
+                        <div class="flex items-baseline">
+                            <span class="text-xl font-bold" id="ec-value">--</span>
+                            <span class="text-gray-500 ml-1">μS/cm</span>
+                        </div>
+                        <div class="mt-2">
+                            <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                <div id="ec-gauge" class="h-full bg-gradient-to-r from-green-400 to-green-500" style="width: 0%"></div>
+                            </div>
+                            <div class="flex justify-between text-xs text-gray-500 mt-1">
+                                <span>5</span>
+                                <span>20</span>
+                                <span>40</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-lg shadow p-4" id="distance-card">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="text-gray-500 text-sm font-medium">Water Level</h3>
+                            <span class="status-badge bg-gray-100 text-gray-800 text-xs px-2 py-0.5 rounded">--</span>
+                        </div>
+                        <div class="flex items-baseline">
+                            <span class="text-xl font-bold" id="distance-value">--</span>
+                            <span class="text-gray-500 ml-1">cm</span>
+                        </div>
+                        <div class="mt-2">
+                            <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                <div id="distance-gauge" class="h-full bg-gradient-to-r from-blue-400 to-blue-500" style="width: 0%"></div>
+                            </div>
+                            <div class="flex justify-between text-xs text-gray-500 mt-1">
+                                <span>1</span>
+                                <span>5</span>
+                                <span>10</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div class="card p-3" id="ph-card">
-                <div class="flex justify-between items-start mb-2">
-                    <h3 class="text-gray-500 text-sm font-medium">pH Level</h3>
-                    <span class="bg-yellow-100 text-yellow-800 text-xs px-2 py-0.5 rounded">High</span>
-                </div>
-                <div class="flex items-baseline">
-                    <span class="text-xl font-bold metric-value" id="ph-value">--</span>
-                    <span class="text-gray-500 ml-1">pH</span>
-                </div>
-                <div class="mt-2">
-                    <div class="progress-bar bg-gray-100">
-                        <div class="progress-value" style="width: 85%"></div>
-                    </div>
-                    <div class="flex justify-between text-xs text-gray-500 mt-1">
-                        <span>5.5</span>
-                        <span>7.0</span>
-                        <span>8.5</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card p-3" id="orp-card">
-                <div class="flex justify-between items-start mb-2">
-                    <h3 class="text-gray-500 text-sm font-medium">ORP</h3>
-                    <span class="bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded">Normal</span>
-                </div>
-                <div class="flex items-baseline">
-                    <span class="text-xl font-bold metric-value" id="orp-value">--</span>
-                    <span class="text-gray-500 ml-1">mV</span>
-                </div>
-                <div class="mt-2">
-                    <div class="progress-bar bg-gray-100">
-                        <div class="progress-value" style="width: 40%"></div>
-                    </div>
-                    <div class="flex justify-between text-xs text-gray-500 mt-1">
-                        <span>150mV</span>
-                        <span>350mV</span>
-                        <span>600mV</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card p-3" id="tds-card">
-                <div class="flex justify-between items-start mb-2">
-                    <h3 class="text-gray-500 text-sm font-medium">TDS</h3>
-                    <span class="bg-red-100 text-red-800 text-xs px-2 py-0.5 rounded">Too High</span>
-                </div>
-                <div class="flex items-baseline">
-                    <span class="text-xl font-bold metric-value" id="tds-value">--</span>
-                    <span class="text-gray-500 ml-1">ppm</span>
-                </div>
-                <div class="mt-2">
-                    <div class="progress-bar bg-gray-100">
-                        <div class="progress-value" style="width: 95%"></div>
-                    </div>
-                    <div class="flex justify-between text-xs text-gray-500 mt-1">
-                        <span>50</span>
-                        <span>250</span>
-                        <span>500</span>
-                    </div>
-                </div>
-            </div>
-        
-            <div class="card p-3" id="ec-card">
-                <div class="flex justify-between items-start mb-2">
-                    <h3 class="text-gray-500 text-sm font-medium">Conductivity</h3>
-                    <span class="bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded">Normal</span>
-                </div>
-                <div class="flex items-baseline">
-                    <span class="text-xl font-bold metric-value" id="ec-value">--</span>
-                    <span class="text-gray-500 ml-1">μS/cm</span>
-                </div>
-                <div class="mt-2">
-                    <div class="progress-bar bg-gray-100">
-                        <div class="progress-value" style="width: 45%"></div>
-                    </div>
-                    <div class="flex justify-between text-xs text-gray-500 mt-1">
-                        <span>5</span>
-                        <span>20</span>
-                        <span>40</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card p-3" id="distance-card">
-                <div class="flex justify-between items-start mb-2">
-                    <h3 class="text-gray-500 text-sm font-medium">Water Level</h3>
-                    <span class="bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded">Good</span>
-                </div>
-                <div class="flex items-baseline">
-                    <span class="text-xl font-bold metric-value" id="distance-value">--</span>
-                    <span class="text-gray-500 ml-1">cm</span>
-                </div>
-                <div class="mt-2">
-                    <div class="progress-bar bg-gray-100">
-                        <div class="progress-value" style="width: 30%"></div>
-                    </div>
-                    <div class="flex justify-between text-xs text-gray-500 mt-1">
-                        <span>1cm</span>
-                        <span>5cm</span>
-                        <span>10cm</span>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="card p-3">
-                <div class="flex justify-between items-start mb-2">
-                    <h3 class="text-gray-500 text-sm font-medium">Quick Actions</h3>
-                </div>
-                <div class="grid grid-cols-2 gap-2">
-                    <button class="text-sm bg-green-50 hover:bg-green-100 text-green-700 font-medium py-2 px-3 rounded">Start Pump</button>
-                    <button class="text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium py-2 px-3 rounded">Toggle Light</button>
-                    <button class="text-sm bg-purple-50 hover:bg-purple-100 text-purple-700 font-medium py-2 px-3 rounded">Reset Sensors</button>
-                    <button class="text-sm bg-gray-50 hover:bg-gray-100 text-gray-700 font-medium py-2 px-3 rounded">Settings</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Charts Section -->
-        <div class="card p-4 md:p-6 mb-6">
-            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4">
-                <h2 class="text-lg font-semibold text-gray-700">Sensor Trends</h2>
-                <div class="flex space-x-4 overflow-x-auto mt-2 md:mt-0">
-                    <a href="#" class="text-sm font-medium text-gray-500 highlight active whitespace-nowrap">24 Hours</a>
-                    <a href="#" class="text-sm font-medium text-gray-500 highlight whitespace-nowrap">Week</a>
-                    <a href="#" class="text-sm font-medium text-gray-500 highlight whitespace-nowrap">Month</a>
-                </div>
-            </div>
-            <div class="chart-container">
-                <canvas id="main-chart"></canvas>
-            </div>
-        </div>
-
-        <!-- Activity Section -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div class="card p-4 md:p-6">
+            <!-- Activity Log Section -->
+            <div class="bg-white rounded-lg shadow p-4 md:p-6 mb-6">
                 <h2 class="text-lg font-semibold text-gray-700 mb-4">Recent Activity</h2>
-                <div class="space-y-4">
-                    <div class="flex items-start">
-                        <div class="flex-shrink-0 h-8 w-8 rounded-full bg-green-100 flex items-center justify-center text-green-500">
+                <div class="space-y-4" id="activity-log">
+                    <div class="flex items-start activity-placeholder">
+                        <div class="flex-shrink-0 h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                 <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
                             </svg>
                         </div>
                         <div class="ml-3 flex-1">
-                            <p class="text-sm font-medium text-gray-900">Temperature sensor reading updated</p>
-                            <p class="text-sm text-gray-500">Value: 21.2°C • <time datetime="2023-01-23T13:23:00">2 minutes ago</time></p>
-                        </div>
-                    </div>
-                    <div class="flex items-start">
-                        <div class="flex-shrink-0 h-8 w-8 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-500">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-                            </svg>
-                        </div>
-                        <div class="ml-3 flex-1">
-                            <p class="text-sm font-medium text-gray-900">TDS level warning</p>
-                            <p class="text-sm text-gray-500">Value exceeds recommended range • <time datetime="2023-01-23T13:23:00">15 minutes ago</time></p>
-                        </div>
-                    </div>
-                    <div class="flex items-start">
-                        <div class="flex-shrink-0 h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-500">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                            </svg>
-                        </div>
-                        <div class="ml-3 flex-1">
-                            <p class="text-sm font-medium text-gray-900">System self-check completed</p>
-                            <p class="text-sm text-gray-500">All systems operational • <time datetime="2023-01-23T13:23:00">1 hour ago</time></p>
+                            <p class="text-sm font-medium text-gray-400">Loading activity data...</p>
+                            <p class="text-sm text-gray-300">Please wait</p>
                         </div>
                     </div>
                 </div>
-                <a href="#" class="block text-sm font-medium text-indigo-600 hover:text-indigo-800 mt-4">View all activity →</a>
             </div>
+        </section>
 
-            <div class="card p-4 md:p-6">
-                <h2 class="text-lg font-semibold text-gray-700 mb-4">System Log</h2>
-                <div class="overflow-auto max-h-64">
-                    <table class="min-w-full text-sm">
-                        <thead>
-                            <tr>
-                                <th class="text-left font-medium text-gray-500 py-2">Time</th>
-                                <th class="text-left font-medium text-gray-500 py-2">Event</th>
-                                <th class="text-left font-medium text-gray-500 py-2">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td class="py-2 text-gray-700">17:42:18</td>
-                                <td class="py-2 text-gray-700">Sensor data collection</td>
-                                <td class="py-2"><span class="bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded">Success</span></td>
-                            </tr>
-                            <tr>
-                                <td class="py-2 text-gray-700">17:30:01</td>
-                                <td class="py-2 text-gray-700">Water pump activated</td>
-                                <td class="py-2"><span class="bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded">Success</span></td>
-                            </tr>
-                            <tr>
-                                <td class="py-2 text-gray-700">17:15:42</td>
-                                <td class="py-2 text-gray-700">System health check</td>
-                                <td class="py-2"><span class="bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded">Success</span></td>
-                            </tr>
-                            <tr>
-                                <td class="py-2 text-gray-700">17:01:53</td>
-                                <td class="py-2 text-gray-700">Database backup</td>
-                                <td class="py-2"><span class="bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded">Success</span></td>
-                            </tr>
-                            <tr>
-                                <td class="py-2 text-gray-700">16:45:19</td>
-                                <td class="py-2 text-gray-700">Network connectivity test</td>
-                                <td class="py-2"><span class="bg-yellow-100 text-yellow-800 text-xs px-2 py-0.5 rounded">Warning</span></td>
-                            </tr>
-                        </tbody>
-                    </table>
+        <!-- Charts Section -->
+        <section id="charts-section" class="section-container hidden">
+            <div class="bg-white rounded-lg shadow p-4 md:p-6 mb-6">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
+                    <h2 class="text-lg font-semibold text-gray-700">Key Metrics Trends</h2>
+                    <div class="flex space-x-4 overflow-x-auto mt-2 sm:mt-0">
+                        <button class="time-range-btn text-sm font-medium text-gray-900 border-b-2 border-green-500" data-range="day">24 Hours</button>
+                        <button class="time-range-btn text-sm font-medium text-gray-500 hover:text-gray-900" data-range="week">Week</button>
+                        <button class="time-range-btn text-sm font-medium text-gray-500 hover:text-gray-900" data-range="month">Month</button>
+                    </div>
+                </div>
+                
+                <!-- pH and EC charts row -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                    <div>
+                        <h4 class="text-sm font-medium text-gray-700 mb-2">pH Levels</h4>
+                        <div class="chart-container">
+                            <canvas id="ph-chart" height="200"></canvas>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-medium text-gray-700 mb-2">Electrical Conductivity</h4>
+                        <div class="chart-container">
+                            <canvas id="ec-chart" height="200"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- All other parameters charts grid -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+                    <div>
+                        <h4 class="text-sm font-medium text-gray-700 mb-2">Temperature</h4>
+                        <div class="chart-container">
+                            <canvas id="temperature-chart" height="200"></canvas>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-medium text-gray-700 mb-2">ORP</h4>
+                        <div class="chart-container">
+                            <canvas id="orp-chart" height="200"></canvas>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-medium text-gray-700 mb-2">TDS</h4>
+                        <div class="chart-container">
+                            <canvas id="tds-chart" height="200"></canvas>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-medium text-gray-700 mb-2">Water Level</h4>
+                        <div class="chart-container">
+                            <canvas id="distance-chart" height="200"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- System Status Section -->
+        <section id="system-status" class="section-container hidden">
+            <div class="bg-white rounded-lg shadow p-4 md:p-6 mb-6">
+                <h2 class="text-lg font-semibold text-gray-700 mb-4">System Status</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h3 class="text-sm font-medium text-gray-500 mb-2">CPU Usage</h3>
+                        <div class="flex items-center">
+                            <div class="w-full bg-gray-200 rounded-full h-2.5 mr-2">
+                                <div id="cpu-gauge" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+                            </div>
+                            <span id="cpu-value" class="text-sm font-medium">--%</span>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1"><span id="cpu-cores">--</span> cores available</p>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h3 class="text-sm font-medium text-gray-500 mb-2">Memory Usage</h3>
+                        <div class="flex items-center">
+                            <div class="w-full bg-gray-200 rounded-full h-2.5 mr-2">
+                                <div id="memory-gauge" class="bg-purple-600 h-2.5 rounded-full" style="width: 0%"></div>
+                            </div>
+                            <span id="memory-value" class="text-sm font-medium">--%</span>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h3 class="text-sm font-medium text-gray-500 mb-2">Disk Usage</h3>
+                        <div class="flex items-center">
+                            <div class="w-full bg-gray-200 rounded-full h-2.5 mr-2">
+                                <div id="disk-gauge" class="bg-green-600 h-2.5 rounded-full" style="width: 0%"></div>
+                            </div>
+                            <span id="disk-value" class="text-sm font-medium">--%</span>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h3 class="text-sm font-medium text-gray-500 mb-2">Network Activity</h3>
+                        <div class="flex items-center">
+                            <div class="w-full bg-gray-200 rounded-full h-2.5 mr-2">
+                                <div id="network-gauge" class="bg-yellow-600 h-2.5 rounded-full" style="width: 0%"></div>
+                            </div>
+                            <span id="network-value" class="text-sm font-medium">--%</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-6">
+                    <h3 class="text-sm font-medium text-gray-700 mb-2">System Information</h3>
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <p class="text-xs text-gray-500">Last Boot</p>
+                                <p class="text-sm font-medium" id="last-boot">--</p>
+                            </div>
+                            <div>
+                                <p class="text-xs text-gray-500">Uptime</p>
+                                <p class="text-sm font-medium" id="uptime">--</p>
+                            </div>
+                            <div>
+                                <p class="text-xs text-gray-500">Device Model</p>
+                                <p class="text-sm font-medium" id="device-model">Raspberry Pi 3B</p>
+                            </div>
+                            <div>
+                                <p class="text-xs text-gray-500">Operating System</p>
+                                <p class="text-sm font-medium" id="os-info">--</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Settings Modal -->
+        <div id="settings-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center hidden">
+            <div class="bg-white rounded-lg max-w-md w-full max-h-90vh overflow-auto p-6">
+                <div class="flex justify-between items-start mb-4">
+                    <h2 class="text-xl font-bold text-gray-900">Settings</h2>
+                    <button id="close-settings" class="text-gray-400 hover:text-gray-500">
+                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                
+                <div class="space-y-4">
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-700 mb-2">Data Refresh Rate</h3>
+                        <select id="refresh-rate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            <option value="10">10 seconds</option>
+                            <option value="30" selected>30 seconds</option>
+                            <option value="60">1 minute</option>
+                            <option value="300">5 minutes</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-700 mb-2">Tank Settings</h3>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="tank-min" class="block text-xs text-gray-500">Min Distance (cm)</label>
+                                <input type="number" id="tank-min" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" value="2">
+                            </div>
+                            <div>
+                                <label for="tank-max" class="block text-xs text-gray-500">Max Distance (cm)</label>
+                                <input type="number" id="tank-max" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" value="20">
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">Min = 100% full, Max = 0% full</p>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-700 mb-2">Theme</h3>
+                        <div class="flex space-x-4">
+                            <button class="theme-btn w-8 h-8 rounded-full bg-green-500 border-2 border-white shadow-sm hover:shadow-md transition" data-theme="green"></button>
+                            <button class="theme-btn w-8 h-8 rounded-full bg-blue-500 border-2 border-transparent shadow-sm hover:shadow-md transition" data-theme="blue"></button>
+                            <button class="theme-btn w-8 h-8 rounded-full bg-purple-500 border-2 border-transparent shadow-sm hover:shadow-md transition" data-theme="purple"></button>
+                            <button class="theme-btn w-8 h-8 rounded-full bg-gray-800 border-2 border-transparent shadow-sm hover:shadow-md transition" data-theme="dark"></button>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-700 mb-2">Display Units</h3>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="inline-flex items-center">
+                                    <input type="radio" name="temperature-unit" value="celsius" class="form-radio h-4 w-4 text-indigo-600" checked>
+                                    <span class="ml-2 text-sm text-gray-700">Celsius (°C)</span>
+                                </label>
+                            </div>
+                            <div>
+                                <label class="inline-flex items-center">
+                                    <input type="radio" name="temperature-unit" value="fahrenheit" class="form-radio h-4 w-4 text-indigo-600">
+                                    <span class="ml-2 text-sm text-gray-700">Fahrenheit (°F)</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-6 flex justify-end space-x-3">
+                    <button id="reset-settings" class="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Reset to Default
+                    </button>
+                    <button id="save-settings" class="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Save Changes
+                    </button>
                 </div>
             </div>
         </div>
-    </div>
 
+        <!-- Offline Notification -->
+        <div id="offline-alert" class="fixed bottom-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg transform translate-y-16 transition-transform duration-300 hidden">
+            <div class="flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                </svg>
+                <span>You are offline. Using cached data.</span>
+            </div>
+        </div>
+    </main>
+
+    <script src="/static/js/main.js" defer></script>
     <script>
-        // Sample data - This will be replaced with real data from your API
-        let latestData = {
-            deviceID: "plt-404cca470da0",
-            timestamp: Date.now()/1000,
-            temperature: 20.938,
-            distance: 2.668,
-            pH: 42.06,
-            ORP: 214.074,
-            TDS: 52594.688,
-            EC: 33.661
-        };
-
-        // Update device info and timestamp
-        document.getElementById('device-id').textContent = `Device: ${latestData.deviceID}`;
-        document.getElementById('last-update').textContent = `Last update: ${new Date(latestData.timestamp * 1000).toLocaleTimeString()}`;
-
-        // Update metric values
-        document.getElementById('temperature-value').textContent = latestData.temperature.toFixed(1);
-        document.getElementById('ph-value').textContent = latestData.pH.toFixed(2);
-        document.getElementById('orp-value').textContent = latestData.ORP.toFixed(0);
-        document.getElementById('tds-value').textContent = Math.round(latestData.TDS);
-        document.getElementById('ec-value').textContent = latestData.EC.toFixed(2);
-        document.getElementById('distance-value').textContent = latestData.distance.toFixed(1);
-
-        // Update summary values at the top
-        document.getElementById('temp-summary').textContent = latestData.temperature.toFixed(1) + '°C';
-        document.getElementById('tds-summary').textContent = Math.round(latestData.TDS) + ' ppm';
-        document.getElementById('ph-summary').textContent = latestData.pH.toFixed(2);
-        document.getElementById('water-summary').textContent = latestData.distance.toFixed(1) + 'cm';
-        
-        // Update water level indicator (reverse scale: lower distance = higher water level)
-        const waterLevelPercent = Math.max(0, Math.min(100, 100 - (latestData.distance / 10 * 100)));
-        document.getElementById('water-level-indicator').style.width = waterLevelPercent + '%';
-
-        // Calculate and update progress bars
-        // Temperature (15-30°C range)
-        updateProgressBar('temperature-card', (latestData.temperature - 15) / 15 * 100);
-        
-        // pH (0-14 range, centered around 7)
-        updateProgressBar('ph-card', latestData.pH / 14 * 100);
-        
-        // ORP (150-600mV range)
-        updateProgressBar('orp-card', (latestData.ORP - 150) / 450 * 100);
-        
-        // TDS (normalize to 0-1000ppm)
-        updateProgressBar('tds-card', Math.min(latestData.TDS / 1000, 100));
-        
-        // EC (0-50 range)
-        updateProgressBar('ec-card', latestData.EC / 50 * 100);
-        
-        // Distance (0-20cm range, reversed so smaller is fuller)
-        updateProgressBar('distance-card', 100 - (latestData.distance / 20 * 100));
-
-        // Update status indicators
-        updateStatus('temperature-card', latestData.temperature, 15, 25, 30);
-        updateStatus('ph-card', latestData.pH, 5.5, 7.5, 9.0);
-        updateStatus('orp-card', latestData.ORP, 150, 350, 600);
-        updateStatus('tds-card', latestData.TDS, 50, 1000, 3000);
-        updateStatus('ec-card', latestData.EC, 0, 20, 50);
-        updateStatus('distance-card', latestData.distance, 0, 5, 10);
-
-        function updateProgressBar(cardId, percentage) {
-            const card = document.getElementById(cardId);
-            if (!card) return;
-            
-            const progressBar = card.querySelector('.progress-value');
-            if (progressBar) {
-                progressBar.style.width = `${Math.min(Math.max(percentage, 0), 100)}%`;
-            }
+        // Register service worker for offline support
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('ServiceWorker registered with scope:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.error('ServiceWorker registration failed:', error);
+                    });
+            });
         }
-
-        function updateStatus(cardId, value, min, optimal, max) {
-            const card = document.getElementById(cardId);
-            if (!card) return;
-            
-            const statusBadge = card.querySelector('span.rounded');
-            if (!statusBadge) return;
-            
-            if (value < min) {
-                statusBadge.className = "bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded";
-                statusBadge.textContent = "Too Low";
-            } else if (value > max) {
-                statusBadge.className = "bg-red-100 text-red-800 text-xs px-2 py-0.5 rounded";
-                statusBadge.textContent = "Too High";
-            } else if (value < optimal * 0.8 || value > optimal * 1.2) {
-                statusBadge.className = "bg-yellow-100 text-yellow-800 text-xs px-2 py-0.5 rounded";
-                statusBadge.textContent = "Suboptimal";
-            } else {
-                statusBadge.className = "bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded";
-                statusBadge.textContent = "Normal";
-            }
-        }
-
-        // Initialize main chart
-        const ctx = document.getElementById('main-chart').getContext('2d');
-        const mainChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                datasets: [
-                    {
-                        label: 'Temperature (°C)',
-                        data: generateSampleData(latestData.temperature, 24),
-                        borderColor: '#F87171',
-                        backgroundColor: 'rgba(248, 113, 113, 0.1)',
-                        borderWidth: 2,
-                        fill: false,
-                        tension: 0.4,
-                        yAxisID: 'y1'
-                    },
-                    {
-                        label: 'pH',
-                        data: generateSampleData(latestData.pH, 24),
-                        borderColor: '#60A5FA',
-                        backgroundColor: 'rgba(96, 165, 250, 0.1)',
-                        borderWidth: 2,
-                        fill: false,
-                        tension: 0.4,
-                        yAxisID: 'y1'
-                    },
-                    {
-                        label: 'Water Level (cm)',
-                        data: generateSampleData(latestData.distance, 24),
-                        borderColor: '#34D399',
-                        backgroundColor: 'rgba(52, 211, 153, 0.1)',
-                        borderWidth: 2,
-                        fill: false,
-                        tension: 0.4,
-                        yAxisID: 'y1'
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: {
-                    mode: 'index',
-                    intersect: false,
-                },
-                plugins: {
-                    legend: {
-                        position: 'top',
-                    },
-                    tooltip: {
-                        callbacks: {
-                            title: function(tooltipItems) {
-                                return new Date(tooltipItems[0].parsed.x).toLocaleString();
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        type: 'time',
-                        time: {
-                            unit: 'hour',
-                            displayFormats: {
-                                hour: 'HH:mm'
-                            }
-                        },
-                        title: {
-                            display: true,
-                            text: 'Time'
-                        }
-                    },
-                    y1: {
-                        type: 'linear',
-                        display: true,
-                        position: 'left',
-                        title: {
-                            display: true,
-                            text: 'Value'
-                        }
-                    }
-                }
-            }
-        });
-
-        // Function to generate sample time-series data around a mean value
-        function generateSampleData(meanValue, points) {
-            const data = [];
-            const now = Date.now();
-            const variation = meanValue * 0.1; // 10% variation
-
-            for (let i = 0; i < points; i++) {
-                const time = now - (points - i) * 3600000; // Hourly points
-                // Random walk pattern
-                const randomValue = meanValue + (Math.random() - 0.5) * variation;
-                data.push({
-                    x: time,
-                    y: randomValue
-                });
-            }
-            return data;
-        }
-
-        // Fetch real data - Replace with your actual API endpoint
-        async function fetchSensorData() {
-            try {
-                // Try to use the /api/latest endpoint first for efficiency
-                const latestResponse = await fetch('/api/latest');
-                if (latestResponse.ok) {
-                    const latestData = await latestResponse.json();
-                    updateAllMetrics(latestData);
-                } else {
-                    // Fall back to individual endpoints
-                    await fetchIndividualSensorData();
-                }
-                
-                // Update timestamp
-                document.getElementById('last-update').textContent = `Last update: ${new Date().toLocaleTimeString()}`;
-            } catch (error) {
-                console.error('Error fetching sensor data:', error);
-                // Try individual endpoints as fallback
-                await fetchIndividualSensorData();
-            }
-        }
-
-        async function fetchIndividualSensorData() {
-            try {
-                // Fetch temperature data
-                const tempResponse = await fetch('/data/temperature');
-                const phResponse = await fetch('/data/pH');
-                const orpResponse = await fetch('/data/ORP');
-                const tdsResponse = await fetch('/data/TDS');
-                const ecResponse = await fetch('/data/EC');
-                const distanceResponse = await fetch('/data/distance');
-                
-                // Process responses
-                const tempData = await tempResponse.json();
-                const phData = await phResponse.json();
-                const orpData = await orpResponse.json();
-                const tdsData = await tdsResponse.json();
-                const ecData = await ecResponse.json();
-                const distanceData = await distanceResponse.json();
-                
-                // If at least one data source has data, update the latest values
-                if (tempData.length > 0) {
-                    updateLatestValue('temperature', tempData[tempData.length - 1].value);
-                }
-                if (phData.length > 0) {
-                    updateLatestValue('pH', phData[phData.length - 1].value);
-                }
-                if (orpData.length > 0) {
-                    updateLatestValue('ORP', orpData[orpData.length - 1].value);
-                }
-                if (tdsData.length > 0) {
-                    updateLatestValue('TDS', tdsData[tdsData.length - 1].value);
-                }
-                if (ecData.length > 0) {
-                    updateLatestValue('EC', ecData[ecData.length - 1].value);
-                }
-                if (distanceData.length > 0) {
-                    updateLatestValue('distance', distanceData[distanceData.length - 1].value);
-                }
-                
-                // Update chart with real data
-                if (tempData.length > 0) {
-                    mainChart.data.datasets[0].data = tempData.map(d => ({ x: d.time * 1000, y: d.value }));
-                }
-                if (phData.length > 0) {
-                    mainChart.data.datasets[1].data = phData.map(d => ({ x: d.time * 1000, y: d.value }));
-                }
-                if (distanceData.length > 0) {
-                    mainChart.data.datasets[2].data = distanceData.map(d => ({ x: d.time * 1000, y: d.value }));
-                }
-                
-                mainChart.update();
-            } catch (error) {
-                console.error('Error fetching individual sensor data:', error);
-            }
-        }
-
-        function updateAllMetrics(data) {
-            if (data.temperature) updateLatestValue('temperature', data.temperature.value);
-            if (data.pH) updateLatestValue('pH', data.pH.value);
-            if (data.ORP) updateLatestValue('ORP', data.ORP.value);
-            if (data.TDS) updateLatestValue('TDS', data.TDS.value);
-            if (data.EC) updateLatestValue('EC', data.EC.value);
-            if (data.distance) updateLatestValue('distance', data.distance.value);
-            
-            if (data.deviceID) {
-                document.getElementById('device-id').textContent = `Device: ${data.deviceID}`;
-            }
-            
-            // Update chart if time-series data is available
-            // This would require additional API calls for historical data
-        }
-
-        function updateLatestValue(metric, value) {
-            latestData[metric] = value;
-            const element = document.getElementById(`${metric}-value`);
-            if (element) {
-                let displayValue = value;
-                // Format based on metric type
-                if (metric === 'temperature' || metric === 'distance' || metric === 'EC') {
-                    displayValue = value.toFixed(1);
-                } else if (metric === 'pH') {
-                    displayValue = value.toFixed(2);
-                } else if (metric === 'ORP' || metric === 'TDS') {
-                    displayValue = Math.round(value);
-                }
-                element.textContent = displayValue;
-                
-                // Update summary values
-                if (metric === 'temperature') {
-                    document.getElementById('temp-summary').textContent = value.toFixed(1) + '°C';
-                } else if (metric === 'pH') {
-                    document.getElementById('ph-summary').textContent = value.toFixed(2);  
-                } else if (metric === 'TDS') {
-                    document.getElementById('tds-summary').textContent = Math.round(value) + ' ppm';
-                } else if (metric === 'distance') {
-                    document.getElementById('water-summary').textContent = value.toFixed(1) + 'cm';
-                    // Update water level indicator
-                    const waterLevelPercent = Math.max(0, Math.min(100, 100 - (value / 10 * 100)));
-                    document.getElementById('water-level-indicator').style.width = waterLevelPercent + '%';
-                }
-                
-                // Update status indicators and progress bars
-                if (metric === 'temperature') {
-                    updateStatus('temperature-card', value, 15, 25, 30);
-                    updateProgressBar('temperature-card', (value - 15) / 15 * 100);
-                } else if (metric === 'pH') {
-                    updateStatus('ph-card', value, 5.5, 7.5, 9.0);
-                    updateProgressBar('ph-card', value / 14 * 100);
-                } else if (metric === 'ORP') {
-                    updateStatus('orp-card', value, 150, 350, 600);
-                    updateProgressBar('orp-card', (value - 150) / 450 * 100);
-                } else if (metric === 'TDS') {
-                    updateStatus('tds-card', value, 50, 1000, 3000);
-                    updateProgressBar('tds-card', Math.min(value / 1000, 100));
-                } else if (metric === 'EC') {
-                    updateStatus('ec-card', value, 0, 20, 50);
-                    updateProgressBar('ec-card', value / 50 * 100);
-                } else if (metric === 'distance') {
-                    updateStatus('distance-card', value, 0, 5, 10);
-                    updateProgressBar('distance-card', 100 - (value / 20 * 100));
-                }
-            }
-        }
-
-        // Initial fetch
-        fetchSensorData();
-        
-        // Fetch data every 30 seconds
-        setInterval(fetchSensorData, 30000);
-        
-        // Add event listener to refresh button
-        document.getElementById('refresh-btn').addEventListener('click', fetchSensorData);
     </script>
 </body>
 </html>

@@ -1,0 +1,47 @@
+{
+    "name": "Plantomio IoT Dashboard",
+    "short_name": "Plantomio",
+    "description": "Monitor and control your hydroponic plant system",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#F9FAFB",
+    "theme_color": "#10B981",
+    "icons": [
+      {
+        "src": "/static/images/icon-192.png",
+        "sizes": "192x192",
+        "type": "image/png",
+        "purpose": "any maskable"
+      },
+      {
+        "src": "/static/images/icon-512.png",
+        "sizes": "512x512",
+        "type": "image/png",
+        "purpose": "any maskable"
+      }
+    ],
+    "orientation": "portrait-primary",
+    "categories": ["productivity", "utilities"],
+    "shortcuts": [
+      {
+        "name": "Dashboard",
+        "url": "/#dashboard-section",
+        "icons": [
+          {
+            "src": "/static/images/dashboard-icon.png",
+            "sizes": "96x96"
+          }
+        ]
+      },
+      {
+        "name": "Charts",
+        "url": "/#charts-section",
+        "icons": [
+          {
+            "src": "/static/images/charts-icon.png",
+            "sizes": "96x96"
+          }
+        ]
+      }
+    ]
+  }

@@ -1,265 +1,281 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Base Tailwind CSS */
+@import 'https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css';
 
-/* Custom styles for the Plantomio dashboard */
-@layer components {
-  /* Card styles with hover effects */
-  .card {
-    @apply bg-white rounded-lg shadow transition duration-300 ease-in-out;
-  }
-  
-  .card:hover {
-    @apply shadow-md transform -translate-y-1;
-  }
-  
-  /* Progress bar styling */
-  .progress-bar {
-    @apply h-1.5 bg-gray-100 rounded-full overflow-hidden;
-  }
-  
-  .progress-value {
-    @apply h-full;
-  }
-  
-  /* Pulse animation */
-  .pulse {
-    @apply inline-block w-2 h-2 rounded-full bg-green-500 mr-1.5 relative;
-  }
-  
-  .pulse:before {
+:root {
+    --primary-color: #10B981;
+    --secondary-color: #059669;
+    --danger-color: #EF4444;
+    --warning-color: #F59E0B;
+    --info-color: #3B82F6;
+    --light-color: #F3F4F6;
+    --dark-color: #1F2937;
+    --sidebar-width: 4rem;
+    --sidebar-bg: #1F2937;
+    --transition-speed: 0.3s;
+}
+
+/* Custom theme settings, will be updated via JS */
+body {
+    --theme-primary: var(--primary-color);
+    --theme-secondary: var(--secondary-color);
+    scroll-behavior: smooth;
+}
+
+/* Basic resets and utilities */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+/* Sidebar styling */
+.sidebar {
+    background-color: var(--sidebar-bg);
+    z-index: 20;
+    transition: all var(--transition-speed) ease;
+}
+
+@media (max-width: 768px) {
+    .sidebar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+    }
+}
+
+/* Navigation links */
+.nav-link {
+    transition: all 0.2s ease;
+}
+
+.nav-link:hover {
+    transform: translateY(-2px);
+}
+
+/* Water tank animation */
+.water-tank-container {
+    position: relative;
+}
+
+.water-fill-rect {
+    transition: height 1s ease, y 1s ease;
+}
+
+/* Pulse animation for live status */
+.pulse {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #10B981;
+    margin-right: 6px;
+    position: relative;
+}
+
+.pulse::after {
     content: '';
-    @apply absolute w-full h-full rounded-full bg-green-500 opacity-70;
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    background-color: #10B981;
+    border-radius: 50%;
     animation: pulse 2s infinite;
-  }
-  
-  @keyframes pulse {
+}
+
+@keyframes pulse {
     0% {
-      transform: scale(1);
-      opacity: 0.7;
+        transform: scale(1);
+        opacity: 1;
     }
     70% {
-      transform: scale(2.5);
-      opacity: 0;
+        transform: scale(2);
+        opacity: 0;
     }
     100% {
-      transform: scale(2.5);
-      opacity: 0;
+        transform: scale(1);
+        opacity: 0;
     }
-  }
-  
-  /* Status badges */
-  .status-normal {
-    @apply bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded;
-  }
-  
-  .status-warning {
-    @apply bg-yellow-100 text-yellow-800 text-xs px-2 py-0.5 rounded;
-  }
-  
-  .status-critical {
-    @apply bg-red-100 text-red-800 text-xs px-2 py-0.5 rounded;
-  }
-  
-  .status-info {
-    @apply bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded;
-  }
-  
-  /* Responsive chart containers */
-  .chart-container {
-    @apply h-64 relative w-full;
-  }
-  
-  @screen md {
+}
+
+/* Status badges */
+.status-badge {
+    transition: all 0.3s ease;
+}
+
+.status-ok {
+    background-color: rgba(16, 185, 129, 0.1);
+    color: rgb(16, 185, 129);
+}
+
+.status-warning {
+    background-color: rgba(245, 158, 11, 0.1);
+    color: rgb(245, 158, 11);
+}
+
+.status-alert {
+    background-color: rgba(239, 68, 68, 0.1);
+    color: rgb(239, 68, 68);
+}
+
+/* Chart styling */
+.chart-container {
+    position: relative;
+    height: 200px;
+    width: 100%;
+}
+
+/* Section visibility */
+.section-container {
+    transition: all 0.3s ease;
+}
+
+.section-container.hidden {
+    display: none;
+}
+
+/* Responsiveness improvements */
+@media (max-width: 640px) {
     .chart-container {
-      @apply h-72;
+        height: 180px;
     }
-  }
-  
-  @screen lg {
-    .chart-container {
-      @apply h-80;
+}
+
+/* Skeleton loading effect */
+.activity-placeholder {
+    animation: skeleton-loading 1.5s infinite;
+}
+
+@keyframes skeleton-loading {
+    0% {
+        opacity: 0.7;
     }
-  }
-  
-  /* Responsive sidebar */
-  .sidebar {
-    @apply bg-gradient-to-b from-gray-800 to-gray-900 text-white;
-  }
-  
-  @screen md {
-    .sidebar {
-      @apply w-16 min-h-screen;
+    50% {
+        opacity: 0.5;
     }
-  }
-  
-  /* Action buttons */
-  .action-button {
-    @apply flex items-center justify-center px-3 py-2 rounded font-medium text-sm transition-colors duration-200;
-  }
-  
-  .action-button-primary {
-    @apply bg-green-50 text-green-700 hover:bg-green-100;
-  }
-  
-  .action-button-secondary {
-    @apply bg-blue-50 text-blue-700 hover:bg-blue-100;
-  }
-  
-  .action-button-tertiary {
-    @apply bg-purple-50 text-purple-700 hover:bg-purple-100;
-  }
-  
-  /* Modern form controls */
-  .form-input {
-    @apply block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500;
-  }
-  
-  .form-textarea {
-    @apply block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500;
-  }
-  
-  /* Tabbed interface */
-  .tab {
-    @apply inline-block px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-900 border-b-2 border-transparent;
-  }
-  
-  .tab-active {
-    @apply text-gray-900 border-b-2 border-green-500;
-  }
-  
-  /* Metric value text */
-  .metric-value {
-    @apply font-mono font-bold tabular-nums;
-  }
-  
-  /* Grid layouts for metrics */
-  .metrics-grid {
-    @apply grid gap-4;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  }
-  
-  @screen sm {
-    .metrics-grid {
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    100% {
+        opacity: 0.7;
     }
-  }
-  
-  @screen xl {
-    .metrics-grid {
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    }
-  }
-  
-  /* Responsive table styles */
-  .table-responsive {
-    @apply w-full overflow-x-auto;
-  }
-  
-  /* Animations */
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-  
-  .animate-fade-in {
-    animation: fadeIn 0.5s ease-in-out;
-  }
-  
-  @keyframes slideInRight {
-    from { transform: translateX(20px); opacity: 0; }
-    to { transform: translateX(0); opacity: 1; }
-  }
-  
-  .animate-slide-in {
-    animation: slideInRight 0.3s ease-out;
-  }
-  
-  /* Dark mode support */
-  .dark .card {
-    @apply bg-gray-800 text-white;
-  }
-  
-  .dark .progress-bar {
-    @apply bg-gray-700;
-  }
-  
-  .dark .status-normal {
-    @apply bg-green-900 text-green-100;
-  }
-  
-  .dark .status-warning {
-    @apply bg-yellow-900 text-yellow-100;
-  }
-  
-  .dark .status-critical {
-    @apply bg-red-900 text-red-100;
-  }
-  
-  /* Chart colors */
-  .chart-colors {
-    --temperature-color: #F87171;
-    --ph-color: #60A5FA;
-    --orp-color: #8B5CF6;
-    --tds-color: #FB923C;
-    --ec-color: #10B981;
-    --distance-color: #3B82F6;
-  }
-  
-  /* Utility classes for common patterns */
-  .sensor-reading {
-    @apply flex items-baseline;
-  }
-  
-  .sensor-reading-value {
-    @apply text-xl font-bold metric-value;
-  }
-  
-  .sensor-reading-unit {
-    @apply text-gray-500 ml-1 text-sm;
-  }
-  
-  /* Breakpoint-specific helpers */
-  @screen sm {
-    .sm-only-flex {
-      @apply flex;
-    }
-    
-    .sm-only-hidden {
-      @apply hidden;
-    }
-  }
-  
-  @screen md {
-    .md-only-flex {
-      @apply flex;
-    }
-    
-    .md-only-hidden {
-      @apply hidden;
-    }
-  }
-  
-  /* Print styles */
-  @media print {
-    .no-print {
-      display: none;
-    }
-    
-    .print-only {
-      display: block;
+}
+
+/* Settings modal */
+.max-h-90vh {
+    max-height: 90vh;
+}
+
+/* Theme buttons */
+.theme-btn {
+    transition: all 0.2s ease;
+}
+
+.theme-btn:hover {
+    transform: scale(1.1);
+}
+
+/* Offline alert */
+#offline-alert {
+    z-index: 100;
+}
+
+/* Loading spinner */
+.loading-spinner {
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top: 3px solid var(--primary-color);
+    width: 20px;
+    height: 20px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Chart tooltip customization */
+.chartjs-tooltip {
+    background-color: rgba(255, 255, 255, 0.95) !important;
+    border-radius: 4px !important;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1) !important;
+    font-family: system-ui, -apple-system, sans-serif !important;
+    padding: 8px 12px !important;
+}
+
+/* Print styles - optimize for printing reports */
+@media print {
+    .sidebar, #settings-button, #refresh-btn, #toggle-auto-update {
+        display: none !important;
     }
     
     body {
-      @apply bg-white text-black;
+        background-color: white !important;
     }
     
-    .card {
-      @apply shadow-none border border-gray-300;
+    main {
+        padding: 0 !important;
     }
-  }
-} w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500;
-  }
-  
-  .form-select {
-    @apply block
+    
+    .shadow {
+        box-shadow: none !important;
+    }
+    
+    .bg-white {
+        background-color: white !important;
+        border: 1px solid #eee !important;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    body.auto-theme {
+        --light-color: #1F2937;
+        --dark-color: #F3F4F6;
+        background-color: #111827;
+        color: #F3F4F6;
+    }
+    
+    body.auto-theme .bg-white {
+        background-color: #1F2937;
+    }
+    
+    body.auto-theme .text-gray-700,
+    body.auto-theme .text-gray-800,
+    body.auto-theme .text-gray-900 {
+        color: #E5E7EB;
+    }
+    
+    body.auto-theme .text-gray-500,
+    body.auto-theme .text-gray-600 {
+        color: #9CA3AF;
+    }
+    
+    body.auto-theme .bg-gray-50 {
+        background-color: #374151;
+    }
+    
+    body.auto-theme .bg-gray-100 {
+        background-color: #4B5563;
+    }
+}
