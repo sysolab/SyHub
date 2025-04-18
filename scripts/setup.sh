@@ -251,28 +251,41 @@ configure_mosquitto() {
         
         log "INFO" "Configuring Mosquitto MQTT broker..."
         
-        # Create password file
-        sudo mosquitto_passwd -c /etc/mosquitto/passwd "$MQTT_USERNAME" << EOF
-$MQTT_PASSWORD
-$MQTT_PASSWORD
-EOF
-
-        # Create configuration file
-        sudo mkdir -p /etc/mosquitto/conf.d
-        cat << EOF | sudo tee /etc/mosquitto/conf.d/$PROJECT_NAME.conf
-# $PROJECT_NAME MQTT Configuration
-listener $MQTT_PORT
-protocol mqtt
-
-# Authentication
-allow_anonymous false
-password_file /etc/mosquitto/passwd
-
-# Security and performance
+        # Backup existing configuration
+        [ -f "/etc/mosquitto/mosquitto.conf" ] && sudo mv /etc/mosquitto/mosquitto.conf /etc/mosquitto/mosquitto.conf.bak-$(date +%F)
+        [ -f "/etc/mosquitto/conf.d/$PROJECT_NAME.conf" ] && sudo mv /etc/mosquitto/conf.d/$PROJECT_NAME.conf /etc/mosquitto/conf.d/$PROJECT_NAME.conf.bak-$(date +%F)
+        
+        # Create main configuration file
+        cat << EOF | sudo tee /etc/mosquitto/mosquitto.conf
+# Mosquitto main configuration
+per_listener_settings true
+pid_file /run/mosquitto/mosquitto.pid
 persistence true
 persistence_location /var/lib/mosquitto/
 log_dest file /var/log/mosquitto/mosquitto.log
+include_dir /etc/mosquitto/conf.d
 EOF
+
+        # Create password file
+        sudo rm -f /etc/mosquitto/passwd
+        sudo touch /etc/mosquitto/passwd
+        sudo mosquitto_passwd -b /etc/mosquitto/passwd "$MQTT_USERNAME" "$MQTT_PASSWORD" || handle_error "Mosquitto password creation"
+        sudo chown mosquitto:mosquitto /etc/mosquitto/passwd
+        sudo chmod 600 /etc/mosquitto/passwd
+
+        # Create listener configuration
+        sudo mkdir -p /etc/mosquitto/conf.d
+        cat << EOF | sudo tee /etc/mosquitto/conf.d/$PROJECT_NAME.conf
+# $PROJECT_NAME MQTT Listener Configuration
+listener $MQTT_PORT
+protocol mqtt
+allow_anonymous false
+password_file /etc/mosquitto/passwd
+EOF
+
+        # Ensure correct permissions
+        sudo chown mosquitto:mosquitto /etc/mosquitto/conf.d/$PROJECT_NAME.conf
+        sudo chmod 644 /etc/mosquitto/conf.d/$PROJECT_NAME.conf
 
         sudo systemctl enable mosquitto
         sudo systemctl restart mosquitto || handle_error "Mosquitto service restart"
