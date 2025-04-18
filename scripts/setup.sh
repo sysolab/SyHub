@@ -243,7 +243,7 @@ configure_wifi() {
     fi
 }
 
-# Configure Mosquitto - Corrected as per https://randomnerdtutorials.com/how-to-install-mosquitto-broker-on-raspberry-pi/
+# Configure Mosquitto 
 configure_mosquitto() {
     if ask_yes_no "Install and configure Mosquitto MQTT broker?" "Y"; then
         log "INFO" "Installing Mosquitto MQTT broker..."
